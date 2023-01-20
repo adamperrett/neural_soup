@@ -79,12 +79,20 @@ class NeuralNet(nn.Module):
 
     def add_neuron(self, rand_init=True):
         with torch.no_grad():
+            self.fc1.bias.requires_grad = True
+            self.fc1.weight.requires_grad = True
+            self.fc2.weight.requires_grad = True
+
             self.fc1.weight = nn.Parameter(torch.vstack([self.fc1.weight, torch.zeros([1, input_size])]))
             self.fc1.bias = nn.Parameter(torch.hstack([self.fc1.bias, torch.zeros(1)]))
             self.fc1.out_features += 1
             self.fc2.weight = nn.Parameter(torch.hstack([self.fc2.weight, torch.zeros([num_classes, 1])]))
             self.fc2.in_features += 1
-        torch.cuda.empty_cache()
+
+            self.fc1.bias.requires_grad = False
+            self.fc1.weight.requires_grad = False
+            self.fc2.weight.requires_grad = False
+        # torch.cuda.empty_cache()
     #     # torch.hstack([self.weight, torch.ones([num_classes, 1])])
     #     # self.weight = nn.Parameter(torch.hstack([self.weight, torch.ones([num_classes, 1])]))
     #     self.fc1.weight = nn.Parameter(torch.vstack([self.fc1.weight, torch.ones([1, input_size])]))

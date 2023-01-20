@@ -19,13 +19,13 @@ else:
 input_size = 28 * 28
 num_classes = 10
 batch_size = 64
-num_epochs = 300
-lr = 0.08
+num_epochs = 100
+lr = 0.003
 momentum = 0.9
 
-hidden_size = 2048
+hidden_size = [512, 512]
 
-test_label = "1 layer hidden_size{} lr{}".format(hidden_size, lr)
+test_label = "hidden_size{} lr{}".format(hidden_size, lr)
 
 trainset = datasets.MNIST('', download=True, train=True, transform=transforms.ToTensor())
 testset = datasets.MNIST('', download=True, train=False, transform=transforms.ToTensor())
@@ -66,15 +66,24 @@ class MyLinear(nn.Linear):
 
 # Fully connected neural network with one hidden layer
 class NeuralNet(nn.Module):
-    def __init__(self, input_size, hidden_size, num_classes, p, neuron_types, dropout=True):
+    def __init__(self, input_size, hidden_size, num_classes, p, neuron_types, dropout=False):
         super(NeuralNet, self).__init__()
         # if dropout:
         #     self.fc1 = MyLinear(input_size, hidden_size, p)
         # else:
-        self.fc1 = nn.Linear(input_size, hidden_size)
-
+        self.layer = nn.ModuleList()
+        self.layer.append(nn.Linear(input_size, hidden_size[0]))
         self.neuron_types = neuron_types
-        self.split = np.random.choice(self.neuron_types, hidden_size)
+        self.splits = [np.random.choice(self.neuron_types, hidden_size[0])]
+        self.act_idxs = [{n_type: np.where(self.splits[-1] == n_type)[0] for n_type in self.neuron_types}]
+
+        for i in range(len(hidden_size)-1):
+            self.layer.append(nn.Linear(hidden_size[i], hidden_size[i+1]))
+            self.splits.append(np.random.choice(self.neuron_types, hidden_size[i+1]))
+            self.act_idxs.append({n_type: np.where(self.splits[-1] == n_type)[0] for n_type in self.neuron_types})
+
+        self.layer.append(nn.Linear(hidden_size[-1], num_classes))
+
         self.functions = {'relu': nn.ReLU(),
                           'tanh': nn.Tanh(),
                           'sig': nn.Sigmoid(),
@@ -84,26 +93,26 @@ class NeuralNet(nn.Module):
                           # 'mha': nn.MultiheadAttention(),
                           'lrelu': nn.LeakyReLU()
                           }
-        self.act_idx = {n_type: np.where(self.split == n_type)[0] for n_type in self.neuron_types}
 
         # self.fc2 = nn.Linear(hidden_size, num_classes)
-        if dropout:
-            self.fc2 = MyLinear(hidden_size, num_classes, p)
-        else:
-            self.fc2 = nn.Linear(hidden_size, num_classes)
+        # if dropout:
+        #     self.fc2 = MyLinear(hidden_size, num_classes, p)
+        # else:
+        #     self.fc2 = nn.Linear(hidden_size, num_classes)
         self.LogSoftmax = nn.LogSoftmax(dim=1)
 
-    def mixed_act(self, x):
-        combined = torch.zeros([len(x), len(self.split)])
+    def mixed_act(self, x, layer):
+        combined = torch.zeros([len(x), len(self.splits[layer])])
         for n_type in self.neuron_types:
-            combined[:, self.act_idx[n_type]] = self.functions[n_type](x[:, self.act_idx[n_type]])
+            combined[:, self.act_idxs[layer][n_type]] = self.functions[n_type](x[:, self.act_idxs[layer][n_type]])
         return combined
 
     def forward(self, x):
-        out = self.fc1(x)
-        # out = self.relu(out)
-        out = self.mixed_act(out)
-        out = self.fc2(out)
+        out = self.layer[0](x)
+        for i in range(1, len(self.layer) - 1):
+            out = self.layer[i](out)
+            out = self.mixed_act(out, i)
+        out = self.layer[-1](out)
         out = self.LogSoftmax(out)
         return out
 
@@ -139,6 +148,7 @@ training_losses = []
 testing_accuracies = []
 
 for epoch in range(num_epochs):
+    print(test_label)
     loss_ = [0 for i in range(len(neuron_types))]
     for images, labels in train_loader:
         # Flatten the input images of [28,28] to [1,784]
@@ -159,7 +169,7 @@ for epoch in range(num_epochs):
 
         optimize_all.step()
 
-        for i in range(len(levels_of_dropout)):
+        for i in range(len(neuron_types)):
             loss_[i] += loss[i]
 
     for i in range(len(neuron_types)):
@@ -187,6 +197,25 @@ for epoch in range(num_epochs):
         for i in range(len(neuron_types)):
             print('Testing accuracy: {} %  {}'.format(100 * correct[i] / total, neuron_types[i]))
         testing_accuracies.append(100 * np.array(correct) / total)
+
+    if len(testing_accuracies) % 10 == 0:
+        print("plotting")
+        plt.figure()
+        for i, p, in enumerate(models):
+            print("\n", p, "\n", np.array(testing_accuracies).astype(float)[:, i])
+            plt.plot([x for x in range(len(np.array(testing_accuracies).astype(float)[:, i]))],
+                     np.array(testing_accuracies).astype(float)[:, i], label=p)
+        plt.ylim([95, 100])
+        plt.xlabel('epoch')
+        plt.ylabel('test accuracy')
+        plt.legend(loc='lower right')
+        figure = plt.gcf()
+        figure.set_size_inches(16, 9)
+        plt.tight_layout(rect=[0, 0.3, 1, 0.95])
+        plt.suptitle(test_label, fontsize=16)
+        plt.grid(visible=None, which='both')
+        plt.savefig("./plots/{}.png".format(test_label), bbox_inches='tight', dpi=200, format='png')
+        plt.close()
 
 # torch.save(model, 'mnist_model.pt')
 print("training:")
