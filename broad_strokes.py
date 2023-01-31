@@ -1,4 +1,8 @@
 '''
+
+pytorchcv library
+
+
 This file will aim to provide a template that the rest of the code can be built from.
 
 It is an idea encompassing a spectrum of different areas: ensembles, evolution, gradient descent and network construction.

@@ -116,6 +116,14 @@ class NeuralNet(nn.Module):
         out = self.LogSoftmax(out)
         return out
 
+def check_memory(where=''):
+    print(where)
+    t = torch.cuda.get_device_properties(0).total_memory
+    r = torch.cuda.memory_reserved(0)
+    a = torch.cuda.memory_allocated(0)
+    f = r - a  # free inside reserved
+    print("   total     reserved     allocated     free")
+    print(["{0:.2E}".format(thing) for thing in [t, r, a, f]])
 
 # levels_of_dropout = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95]
 levels_of_dropout = [0, 0.1]
@@ -148,6 +156,7 @@ training_losses = []
 testing_accuracies = []
 
 for epoch in range(num_epochs):
+    check_memory("start")
     print(test_label)
     loss_ = [0 for i in range(len(neuron_types))]
     for images, labels in train_loader:

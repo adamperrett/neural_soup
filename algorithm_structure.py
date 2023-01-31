@@ -14,37 +14,12 @@ Evolving at the neural level with GD:
 Building architecture:
 (Have a randomly connected architecture and use dropout to extract useful architectures?)
 1. Initialise with shit loads of connections
-2.
+2. Train using dropout
+3. Combine dropout mask with error to approximate neuron fitness
+    Keep track of mask used to extract important connections?
+4. Mate and mutate
 
-class MyDropout(nn.Module):
-    def __init__(self, p: float = 0.5):
-        super(MyDropout, self).__init__()
-        if p < 0 or p > 1:
-            raise ValueError("dropout probability has to be between 0 and 1, " "but got {}".format(p))
-        self.p = p
 
-    def forward(self, X):
-        if self.training:
-            binomial = torch.distributions.binomial.Binomial(probs=1-self.p)
-            return X * binomial.sample(X.size()) * (1.0/(1-self.p))
-        return X
-
-class MyLinear(nn.Linear):
-    def __init__(self, in_feats, out_feats, drop_p, bias=True):
-        super(MyLinear, self).__init__(in_feats, out_feats, bias=bias)
-        self.custom_dropout = Dropout(p=drop_p)
-
-    def forward(self, input):
-        dropout_value = self.custom_dropout(self.weight)
-        return F.linear(input, dropout_value, self.bias)
-
-loss_fn = nn.MSELoss(reduction='none')
-input = torch.randn(10, 1, requires_grad=True)
-target = torch.randn(10, 1)
-loss_each = loss_fn(input, target)
-loss_all =  torch.mean(loss_each)
-loss_all.backward()
-other_computation(loss_each.detach())
 
 ------------------------------------------------------------------------------
 

@@ -79,9 +79,9 @@ class NeuralNet(nn.Module):
 
     def add_neuron(self, rand_init=True):
         with torch.no_grad():
-            self.fc1.bias.requires_grad = True
-            self.fc1.weight.requires_grad = True
-            self.fc2.weight.requires_grad = True
+            self.fc1.bias.requires_grad = False
+            self.fc1.weight.requires_grad = False
+            self.fc2.weight.requires_grad = False
 
             self.fc1.weight = nn.Parameter(torch.vstack([self.fc1.weight, torch.zeros([1, input_size])]))
             self.fc1.bias = nn.Parameter(torch.hstack([self.fc1.bias, torch.zeros(1)]))
@@ -89,9 +89,9 @@ class NeuralNet(nn.Module):
             self.fc2.weight = nn.Parameter(torch.hstack([self.fc2.weight, torch.zeros([num_classes, 1])]))
             self.fc2.in_features += 1
 
-            self.fc1.bias.requires_grad = False
-            self.fc1.weight.requires_grad = False
-            self.fc2.weight.requires_grad = False
+            self.fc1.bias.requires_grad = True
+            self.fc1.weight.requires_grad = True
+            self.fc2.weight.requires_grad = True
         # torch.cuda.empty_cache()
     #     # torch.hstack([self.weight, torch.ones([num_classes, 1])])
     #     # self.weight = nn.Parameter(torch.hstack([self.weight, torch.ones([num_classes, 1])]))
@@ -129,6 +129,14 @@ class NeuralNet(nn.Module):
         out = self.LogSoftmax(out)
         return out
 
+def check_memory(where=''):
+    print(where)
+    t = torch.cuda.get_device_properties(0).total_memory
+    r = torch.cuda.memory_reserved(0)
+    a = torch.cuda.memory_allocated(0)
+    f = r - a  # free inside reserved
+    print("   total     reserved     allocated     free")
+    print(["{0:.2E}".format(thing) for thing in [t, r, a, f]])
 
 levels_of_dropout = [0.3]
 
@@ -146,6 +154,7 @@ training_losses = []
 testing_accuracies = []
 
 for epoch in range(num_epochs):
+    check_memory("start")
     loss_ = [0 for i in range(len(levels_of_dropout))]
     for images, labels in train_loader:
         # Flatten the input images of [28,28] to [1,784]

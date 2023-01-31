@@ -239,20 +239,17 @@ def add_neurons(model, best_weights):
             model.layer[layer].bias.requires_grad = False
             model.layer[layer+1].weight.requires_grad = False
 
-            check_memory("add 1") #y \/
             model.layer[layer].weight = nn.Parameter(
                 torch.vstack([model.layer[layer].weight,
                               mutate_and_add(weight_to, model.layer[layer].weight.shape[1]).unsqueeze(0)]),
                 requires_grad=False
             )
-            check_memory("add 2")
             model.layer[layer].bias = nn.Parameter(
                 torch.hstack([model.layer[layer].bias, bias + (torch.randn(1) * mutate_stdev)]),
                 requires_grad=False
             )
             model.layer[layer].out_features += 1
 
-            check_memory("add 3") #y \/
             model.layer[layer+1].weight = nn.Parameter(
                 torch.hstack([model.layer[layer+1].weight,
                               mutate_and_add(weight_from, model.layer[layer + 1].weight.shape[0]).unsqueeze(1)]),
@@ -268,7 +265,6 @@ def add_neurons(model, best_weights):
             # model.layer[layer+1].weight = nn.Parameter(
             #     torch.hstack([model.layer[layer+1].weight,
             #                   weight_from.unsqueeze(1)[:len(model.layer[layer+1].weight), :]]))
-            check_memory("add 4")
             model.splits[layer] = np.hstack([model.splits[layer], split])
 
             # print("add after", layer, model.layer[layer].weight.shape, model.layer[layer+1].weight.shape)
@@ -289,27 +285,23 @@ def remove_neurons(model, idx, weighted_mask):
             model.layer[layer].bias.requires_grad = False
             # weighted_mask[layer].detach()# = False
 
-            check_memory("1") #y \/
             model.layer[layer].weight = nn.Parameter(
                 torch.vstack([model.layer[layer].weight[:neuron],
                               model.layer[layer].weight[neuron+1:]]),
                 requires_grad=False
             )
             model.layer[layer].out_features -= 1
-            check_memory("before 2")
             model.layer[layer+1].weight = nn.Parameter(
                 torch.hstack([model.layer[layer+1].weight[:, :neuron],
                               model.layer[layer+1].weight[:, neuron+1:]]),
                 requires_grad=False
             )
-            check_memory("before 3")
             model.layer[layer+1].in_features -= 1
             model.layer[layer].bias = nn.Parameter(
                 torch.hstack([model.layer[layer].bias[:neuron],
                               model.layer[layer].bias[neuron+1:]]),
                 requires_grad=False
             )
-            check_memory("before 4")
             model.splits[layer] = np.delete(model.splits[layer], neuron)
 
             # print("del after", layer, model.layer[layer].weight.shape, model.layer[layer+1].weight.shape)
@@ -317,7 +309,6 @@ def remove_neurons(model, idx, weighted_mask):
             # for l in weighted_mask[layer]:
             #     l.requires_grad = False
             # weighted_mask[layer].requires_grad = False
-            check_memory("before 5")
             weighted_mask[layer] = nn.Parameter(
                 torch.hstack([weighted_mask[layer][:neuron], weighted_mask[layer][neuron+1:]]),
                 requires_grad=False
@@ -327,7 +318,6 @@ def remove_neurons(model, idx, weighted_mask):
             model.layer[layer+1].weight.requires_grad = True
             model.layer[layer].bias.requires_grad = True
             # weighted_mask[layer].requires_grad = False
-        check_memory("before empty")
         torch.cuda.empty_cache()
 
 def add_remove_neurons(weighted_masks):
@@ -339,9 +329,8 @@ def add_remove_neurons(weighted_masks):
             # max_v, max_i = torch.topk(torch.hstack(weighted_masks[0]), in_out_neurons)
             # max_idx = np.array(np.unravel_index(max_i.to('cpu').numpy(), shape)).T
             max_idx = min_max_index([wm.to('cpu').detach().numpy() for wm in setting], in_out_neurons)
-            check_memory("before remove")
+
             remove_neurons(models[m], max_idx, setting)
-            check_memory("after remove")
 
             # min_v, min_i = torch.topk(torch.hstack(weighted_masks[0]), in_out_neurons)
             # min_idx = np.array(np.unravel_index(min_i.to('cpu').numpy(), shape)).T
@@ -357,7 +346,6 @@ def add_remove_neurons(weighted_masks):
                 }
                 best_weights.append(weight_dict)
 
-            check_memory("before add")
             add_neurons(models[m], best_weights)
 
             # for layer in range(len(setting)):
@@ -382,11 +370,6 @@ def add_remove_neurons(weighted_masks):
             print("Size of model", [len(s) for s in models[m].splits], m)
             models[m].split_to_idx()
         # print("Done shifting")
-        check_memory("before cache")
-        torch.cuda.empty_cache()
-        check_memory("after cache")
-
-check_memory("start")
 
 models = {}
 params = []
@@ -409,39 +392,29 @@ for epoch in range(num_epochs):
     for p in models:
         models[p].train()
     loss_ = [0 for i in range(len(neuron_types))]
-    check_memory("before batch")
     for batch, (images, labels) in enumerate(train_loader):
         print("Starting batch", batch+1, "/", len(train_loader))
-        check_memory("before cache")
-        torch.cuda.empty_cache()
-        check_memory("after cache")
         # Flatten the input images of [28,28] to [1,784]
         images = images.reshape(-1, 784).to(torch.device(device))
-        check_memory("after image")
 
         output = []
         for p in models:
             output.append(models[p](images))
 
-        check_memory("output")
         loss = []
         mask_and_example_loss = []
         for out, masks in output:
             loss_each = lossFunction(out, labels)
             mask_and_example_loss.append([masks, loss_each])
             loss.append(torch.mean(loss_each))
-        check_memory("mask")
 
         if batch % int(round(evo_rate)) == int(round(evo_rate)) - 1:
             print("skipping batch")
             optimize_all.zero_grad()
-            check_memory("after opt")
             for l in loss:
                 l.backward()
-            check_memory("after bw")
             processed_mask = process_mask_and_loss(mask_and_example_loss)
 
-            check_memory("processed mask")
             testing_accuracy_before = []
             with torch.no_grad():
                 for p in models:
@@ -464,9 +437,7 @@ for epoch in range(num_epochs):
                     print('Testing accuracy before: {} %  {}'.format(100 * correct[i] / total, neuron_types[i]))
                     testing_accuracy_before.append(100 * np.array(correct[i]) / total)
 
-            check_memory("before add remove")
             add_remove_neurons(processed_mask)
-            check_memory("after add remove")
 
             testing_accuracy_after = []
             with torch.no_grad():
@@ -495,11 +466,9 @@ for epoch in range(num_epochs):
                     neuron_types[i]))
             for p in models:
                 models[p].train()
-            check_memory("after train test")
 
         # processed_masks.append(processed_mask)
         else:
-            check_memory("before gd")
             optimize_all.zero_grad()
 
             for l in loss:
@@ -507,7 +476,6 @@ for epoch in range(num_epochs):
 
             optimize_all.step()
 
-            check_memory("after gd")
         for i in range(len(neuron_types)):
             loss_[i] += loss[i]
 
