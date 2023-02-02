@@ -9,7 +9,12 @@ import copy
 import matplotlib.pyplot as plt
 import matplotlib.pylab as pl
 import seaborn as sns
+import gc
 sns.set_theme(style="whitegrid")
+
+seed = 272727
+torch.manual_seed(seed)
+np.random.seed(seed)
 
 gpu = True
 if gpu:
@@ -21,14 +26,14 @@ else:
 
 input_size = 28 * 28
 num_classes = 10
-batch_size = 256
-num_epochs = 100
-lr = 0.03
+batch_size = 128
+num_epochs = 1000
+lr = 0.05
 momentum = 0.9
 
-hidden_size = [512, 512]
+hidden_size = [1024, 1024]
 
-in_out_neurons = 10
+in_out_neurons = 1000
 evo_rate = 60
 mutate_stdev = 0.1
 rate_reduction = 1.05
@@ -50,7 +55,7 @@ neuron_types = [['relu'],
                 ['relu', 'tanh', 'sig', 'smin', 'smax', 'gelu', 'lrelu', 'gauss']]
 colours = pl.cm.gist_rainbow(np.linspace(0, 1, len(neuron_types)))
 
-test_label = "evo_rate{}x{}x{}+-{} drop{} hidden_size{} lr{} bs{}".format(
+test_label = "new_network{}x{}x{}+-{} drop{} hidden_size{} lr{} bs{}".format(
     in_out_neurons,
     evo_rate,
     rate_reduction,
@@ -188,6 +193,7 @@ def check_memory(where=''):
     f = r - a  # free inside reserved
     print("     total      reserved       allocated       free")
     print(["{0:.4E}".format(thing) for thing in [t, r, a, f]])
+    # print(torch.cuda.memory_summary(device=None, abbreviated=False))
 
 def process_mask_and_loss(mask_and_loss):
     with torch.no_grad():
@@ -198,9 +204,6 @@ def process_mask_and_loss(mask_and_loss):
                 weighted_mask = torch.mul(loss.reshape([loss.shape[0], 1]), mask)
                 layers.append((torch.sum(weighted_mask, dim=0) / torch.sum(mask, dim=0)).detach())
             network.append(layers)
-        # print("new batch")
-        # for n, nt in zip(network, neuron_types):
-        #     print("min", torch.min(n[0]), "max", torch.max(n[0]), "diff", torch.max(n[0]) - torch.min(n[0]), nt)
     return network
 
 def min_max_index(numbers, in_out_neurons, min=False):
@@ -219,11 +222,11 @@ def min_max_index(numbers, in_out_neurons, min=False):
 def mutate_and_add(old_weights, other_size=1):
     with torch.no_grad():
         mutate_amount = torch.randn(other_size) * mutate_stdev
-        new_weights = torch.hstack([old_weights, torch.zeros(other_size - old_weights.shape[0])])
-        new_weights += mutate_amount
+        new_weights = torch.hstack([old_weights, torch.zeros(other_size - old_weights.shape[0]).to('cpu')])
+        new_weights += mutate_amount.to('cpu')
     return new_weights
 
-def add_neurons(model, best_weights):
+def add_neurons(model_copy, best_weights):
     with torch.no_grad():
         for params in best_weights:
             layer = params["layer"]
@@ -232,168 +235,120 @@ def add_neurons(model, best_weights):
             bias = params["bias"]
             split = params["split"]
 
-            # print("add before", layer, model.layer[layer].weight.shape, model.layer[layer+1].weight.shape,
-            #       weight_to.shape, weight_from.shape)
+            model_copy[layer]['weight'] = torch.vstack([model_copy[layer]['weight'],
+                              mutate_and_add(weight_to, model_copy[layer]['weight'].shape[1]).unsqueeze(0)])
 
-            model.layer[layer].weight.requires_grad = False
-            model.layer[layer].bias.requires_grad = False
-            model.layer[layer+1].weight.requires_grad = False
+            model_copy[layer]['bias'] = torch.hstack([model_copy[layer]['bias'], bias + (torch.randn(1).to('cpu') * mutate_stdev)])
 
-            model.layer[layer].weight = nn.Parameter(
-                torch.vstack([model.layer[layer].weight,
-                              mutate_and_add(weight_to, model.layer[layer].weight.shape[1]).unsqueeze(0)]),
-                requires_grad=False
-            )
-            model.layer[layer].bias = nn.Parameter(
-                torch.hstack([model.layer[layer].bias, bias + (torch.randn(1) * mutate_stdev)]),
-                requires_grad=False
-            )
-            model.layer[layer].out_features += 1
+            model_copy[layer+1]['weight'] = torch.hstack([model_copy[layer+1]['weight'],
+                              mutate_and_add(weight_from, model_copy[layer+1]['weight'].shape[0]).unsqueeze(1)])
 
-            model.layer[layer+1].weight = nn.Parameter(
-                torch.hstack([model.layer[layer+1].weight,
-                              mutate_and_add(weight_from, model.layer[layer + 1].weight.shape[0]).unsqueeze(1)]),
-                requires_grad=False
-            )
-            model.layer[layer+1].in_features += 1
+            model_copy[layer]['splits'] = np.hstack([model_copy[layer]['splits'], split])
 
-            # model.layer[layer].weight = nn.Parameter(
-            #     torch.hstack([model.layer[layer].weight,
-            #                   weight_to.unsqueeze(0)[:, :model.layer[layer].weight.shape[1]]]))
-            # model.layer[layer].bias = nn.Parameter(
-            #     torch.hstack([model.layer[layer].bias, bias]))
-            # model.layer[layer+1].weight = nn.Parameter(
-            #     torch.hstack([model.layer[layer+1].weight,
-            #                   weight_from.unsqueeze(1)[:len(model.layer[layer+1].weight), :]]))
-            model.splits[layer] = np.hstack([model.splits[layer], split])
-
-            # print("add after", layer, model.layer[layer].weight.shape, model.layer[layer+1].weight.shape)
-
-            model.layer[layer].weight.requires_grad = True
-            model.layer[layer].bias.requires_grad = True
-            model.layer[layer+1].weight.requires_grad = True
+        return model_copy
 
 def remove_neurons(model, idx, weighted_mask):
     with torch.no_grad():
+        model_copy = [{} for l in range(len(model.layer))]
+        for l in range(len(model.layer)):
+            model_copy[l]['weight'] = model.layer[l].weight.data.to('cpu')
+            model_copy[l]['bias'] = model.layer[l].bias.data.to('cpu')
+        for l in range(len(model.splits)):
+            model_copy[l]['splits'] = model.splits[l]
         sorted_idx = sorted(idx, key=lambda x: x[1], reverse=True)
         for (layer, neuron) in sorted_idx:
 
-            # print("del before", layer, model.layer[layer].weight.shape, model.layer[layer+1].weight.shape)
+            model_copy[layer]['weight'] = torch.vstack([model_copy[layer]['weight'][:neuron],
+                                                        model_copy[layer]['weight'][neuron+1:]])
 
-            model.layer[layer].weight.requires_grad = False
-            model.layer[layer+1].weight.requires_grad = False
-            model.layer[layer].bias.requires_grad = False
-            # weighted_mask[layer].detach()# = False
+            model_copy[layer+1]['weight'] = torch.hstack([model_copy[layer+1]['weight'][:, :neuron],
+                              model_copy[layer+1]['weight'][:, neuron+1:]])
 
-            model.layer[layer].weight = nn.Parameter(
-                torch.vstack([model.layer[layer].weight[:neuron],
-                              model.layer[layer].weight[neuron+1:]]),
-                requires_grad=False
-            )
-            model.layer[layer].out_features -= 1
-            model.layer[layer+1].weight = nn.Parameter(
-                torch.hstack([model.layer[layer+1].weight[:, :neuron],
-                              model.layer[layer+1].weight[:, neuron+1:]]),
-                requires_grad=False
-            )
-            model.layer[layer+1].in_features -= 1
-            model.layer[layer].bias = nn.Parameter(
-                torch.hstack([model.layer[layer].bias[:neuron],
-                              model.layer[layer].bias[neuron+1:]]),
-                requires_grad=False
-            )
-            model.splits[layer] = np.delete(model.splits[layer], neuron)
+            model_copy[layer]['bias'] = torch.hstack([model_copy[layer]['bias'][:neuron],
+                              model_copy[layer]['bias'][neuron+1:]])
 
-            # print("del after", layer, model.layer[layer].weight.shape, model.layer[layer+1].weight.shape)
+            model_copy[layer]['splits'] = np.delete(model_copy[layer]['splits'], neuron)
 
-            # for l in weighted_mask[layer]:
-            #     l.requires_grad = False
-            # weighted_mask[layer].requires_grad = False
             weighted_mask[layer] = nn.Parameter(
                 torch.hstack([weighted_mask[layer][:neuron], weighted_mask[layer][neuron+1:]]),
                 requires_grad=False
             )
 
-            model.layer[layer].weight.requires_grad = True
-            model.layer[layer+1].weight.requires_grad = True
-            model.layer[layer].bias.requires_grad = True
-            # weighted_mask[layer].requires_grad = False
         torch.cuda.empty_cache()
+    return model_copy
 
 def add_remove_neurons(weighted_masks):
     with torch.no_grad():
+        all_models = []
         for setting, m in zip(weighted_masks, models):
 
-            # shape = [len(weighted_masks[0]), len(weighted_masks[0][0])]
-
-            # max_v, max_i = torch.topk(torch.hstack(weighted_masks[0]), in_out_neurons)
-            # max_idx = np.array(np.unravel_index(max_i.to('cpu').numpy(), shape)).T
             max_idx = min_max_index([wm.to('cpu').detach().numpy() for wm in setting], in_out_neurons)
 
-            remove_neurons(models[m], max_idx, setting)
+            pruned_model = remove_neurons(models[m], max_idx, setting)
 
-            # min_v, min_i = torch.topk(torch.hstack(weighted_masks[0]), in_out_neurons)
-            # min_idx = np.array(np.unravel_index(min_i.to('cpu').numpy(), shape)).T
             min_idx = min_max_index([wm.to('cpu').detach().numpy() for wm in setting], in_out_neurons, min=True)
             best_weights = []
             for (l, n) in min_idx:
                 weight_dict = {
-                    "weight_to": models[m].layer[l].weight[n],
-                    "weight_from": models[m].layer[l+1].weight[:, n],
-                    "bias": models[m].layer[l].bias[n],
-                    "split": models[m].splits[l][n],
+                    "weight_to": pruned_model[l]['weight'][n],
+                    "weight_from": pruned_model[l+1]['weight'][:, n],
+                    "bias": pruned_model[l]['bias'][n],
+                    "split": pruned_model[l]['splits'][n],
                     "layer": l
                 }
                 best_weights.append(weight_dict)
 
-            add_neurons(models[m], best_weights)
+            grown_model = add_neurons(pruned_model, best_weights)
+            all_models.append(grown_model)
 
-            # for layer in range(len(setting)):
-            #     mask = setting[layer]
-            #     # mask = torch.nan_to_num(mask, nan=torch.max(mask))
-            #     min_k_v, min_k_i = torch.topk(mask, in_out_neurons, largest=False)
-            #     max_k_v, max_k_i = torch.topk(mask, in_out_neurons)
-            #     # add mutation and crossover here
-            #     models[m].layer[layer].weight.requires_grad = False
-            #     models[m].layer[layer].bias.requires_grad = False
-            #     models[m].layer[layer+1].weight.requires_grad = False
-            #     models[m].layer[layer+1].bias.requires_grad = False
-            #     models[m].layer[layer].weight[max_k_i] = models[m].layer[layer].weight[min_k_i]
-            #     models[m].layer[layer+1].weight[:, max_k_i] = models[m].layer[layer+1].weight[:, min_k_i]
-            #     models[m].layer[layer].bias[max_k_i] = models[m].layer[layer].bias[min_k_i]
-            #     models[m].splits[layer][max_k_i.to('cpu')] = models[m].splits[layer][min_k_i.to('cpu')]
-            #     models[m].layer[layer].bias.requires_grad = True
-            #     models[m].layer[layer].weight.requires_grad = True
-            #     models[m].layer[layer+1].bias.requires_grad = True
-            #     models[m].layer[layer+1].weight.requires_grad = True
                 # reset the weight momentum values
-            print("Size of model", [len(s) for s in models[m].splits], m)
+            print("Size of model", [len(s['bias']) for s in all_models[-1]], m)
             models[m].split_to_idx()
-        # print("Done shifting")
+    return all_models
 
-models = {}
-params = []
-# for p in levels_of_dropout:
-for nt in neuron_types:
-    models['{}'.format(nt)] = NeuralNet(input_size, hidden_size, num_classes,
-                                       neuron_types=nt, p=levels_of_dropout[0]).to(device)
-    params.append({'params': models['{}'.format(nt)].parameters()})
+def make_network(from_weights=False):
+    models = {}
+    new_params = []
+    if from_weights:
+        for nt, params in zip(neuron_types, from_weights):
+            hs = []
+            for layer in params:
+                hs.append(layer['bias'].shape[0])
+            del hs[-1]
+            models['{}'.format(nt)] = NeuralNet(input_size, hs, num_classes,
+                                               neuron_types=nt, p=levels_of_dropout[0]).to(device)
 
-lossFunction = nn.NLLLoss(reduction='none')
-optimize_all = optim.SGD(params,
-                         lr=lr, momentum=momentum)
+            for l in range(len(models['{}'.format(nt)].layer)):
+                models['{}'.format(nt)].layer[l].weight.data = params[l]['weight'].to(device)
+                models['{}'.format(nt)].layer[l].bias.data = params[l]['bias'].to(device)
+            for l in range(len(models['{}'.format(nt)].splits)):
+                models['{}'.format(nt)].splits[l] = params[l]['splits']
+            new_params.append({'params': models['{}'.format(nt)].parameters()})
+    else:
+        for nt in neuron_types:
+            models['{}'.format(nt)] = NeuralNet(input_size, hidden_size, num_classes,
+                                               neuron_types=nt, p=levels_of_dropout[0]).to(device)
+            new_params.append({'params': models['{}'.format(nt)].parameters()})
+
+    lossFunction = nn.NLLLoss(reduction='none')
+    optimize_all = optim.SGD(new_params,
+                             lr=lr, momentum=momentum)
+    return models, lossFunction, optimize_all
+
+models, lossFunction, optimize_all = make_network()
 
 training_losses = []
 testing_accuracies = []
 
 for epoch in range(num_epochs):
+    check_memory("start")
     print(test_label)
     processed_masks = []
     for p in models:
         models[p].train()
     loss_ = [0 for i in range(len(neuron_types))]
     for batch, (images, labels) in enumerate(train_loader):
-        print("Starting batch", batch+1, "/", len(train_loader))
+        # print("Starting batch", batch+1, "/", len(train_loader))
         # Flatten the input images of [28,28] to [1,784]
         images = images.reshape(-1, 784).to(torch.device(device))
 
@@ -408,8 +363,8 @@ for epoch in range(num_epochs):
             mask_and_example_loss.append([masks, loss_each])
             loss.append(torch.mean(loss_each))
 
-        if batch % int(round(evo_rate)) == int(round(evo_rate)) - 1:
-            print("skipping batch")
+        # if batch % int(round(evo_rate)) == int(round(evo_rate)) - 1:
+        if (len(train_loader) - batch) % int(round(evo_rate)) == 0:
             optimize_all.zero_grad()
             for l in loss:
                 l.backward()
@@ -437,7 +392,14 @@ for epoch in range(num_epochs):
                     print('Testing accuracy before: {} %  {}'.format(100 * correct[i] / total, neuron_types[i]))
                     testing_accuracy_before.append(100 * np.array(correct[i]) / total)
 
-            add_remove_neurons(processed_mask)
+            for m in models:
+                models[m].to('cpu')
+            # del models
+            # gc.collect()
+
+            new_model = add_remove_neurons(processed_mask)
+            models, lossFunction, optimize_all = make_network(new_model)
+            # gc.collect()
 
             testing_accuracy_after = []
             with torch.no_grad():
@@ -477,7 +439,7 @@ for epoch in range(num_epochs):
             optimize_all.step()
 
         for i in range(len(neuron_types)):
-            loss_[i] += loss[i]
+            loss_[i] += loss[i].detach()
 
     for i in range(len(neuron_types)):
         print("Epoch{}, Training loss:{} types:{}".format(epoch,
