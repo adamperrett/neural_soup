@@ -27,6 +27,7 @@ lr = 0.03
 momentum = 0.9
 
 hidden_size = [512, 512]
+layer_reserve = 100
 
 in_out_neurons = 10
 evo_rate = 60
@@ -79,6 +80,14 @@ class Gaussian(nn.Module):
         # return torch.clamp(gauss, min=self.min, max=self.max)
         return gauss
 
+class Empty(nn.Module):
+
+    def __init__(self):
+        super(Empty, self).__init__()
+
+    def forward(self, x):
+        return torch.zeros_like(x)
+
 class MyDropout(nn.Module):
     def __init__(self, p: float = 0.5):
         super(MyDropout, self).__init__()
@@ -116,16 +125,19 @@ class NeuralNet(nn.Module):
 
         self.dropout = dropout
         self.layer = nn.ModuleList()
-        self.layer.append(nn.Linear(input_size, hidden_size[0]))
+        self.layer.append(nn.Linear(input_size, hidden_size[0]+layer_reserve))
         self.neuron_types = neuron_types
         self.splits = [np.random.choice(self.neuron_types, hidden_size[0])]
 
         for i in range(len(hidden_size)-1):
             if dropout:
-                self.layer.append(MyLinear(hidden_size[i], hidden_size[i+1], p))
+                self.layer.append(MyLinear(hidden_size[i]+layer_reserve, hidden_size[i+1]+layer_reserve, p))
             else:
-                self.layer.append(nn.Linear(hidden_size[i], hidden_size[i+1]))
-            self.splits.append(np.random.choice(self.neuron_types, hidden_size[i+1]))
+                self.layer.append(nn.Linear(hidden_size[i]+layer_reserve, hidden_size[i+1]+layer_reserve))
+            self.splits.append(np.hstack([
+                np.random.choice(self.neuron_types, hidden_size[i+1]),
+                ['empty' for i in range(layer_reserve)]])
+            )
 
         self.split_to_idx()
 
@@ -142,7 +154,8 @@ class NeuralNet(nn.Module):
                           'gelu': nn.GELU(),
                           # 'mha': nn.MultiheadAttention(),
                           'lrelu': nn.LeakyReLU(),
-                          'gauss': Gaussian()
+                          'gauss': Gaussian(),
+                          'empty': Empty()
                           # batch norm
                           # global pool
                           # conv
@@ -152,8 +165,10 @@ class NeuralNet(nn.Module):
 
     def split_to_idx(self):
         self.act_idxs = []
+        self.non_empty = []
         for split in self.splits:
             self.act_idxs.append({n_type: np.where(split == n_type)[0] for n_type in self.neuron_types})
+            # self.non_empty.append([i if ])
 
     def mixed_act(self, x, layer):
         combined = torch.zeros([len(x), len(self.splits[layer])])

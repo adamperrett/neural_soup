@@ -284,9 +284,9 @@ def remove_neurons(model, idx, weighted_mask):
 
             # print("del before", layer, model.layer[layer].weight.shape, model.layer[layer+1].weight.shape)
 
-            model.layer[layer].weight.requires_grad = False
-            model.layer[layer+1].weight.requires_grad = False
-            model.layer[layer].bias.requires_grad = False
+            # model.layer[layer].weight.requires_grad = False
+            # model.layer[layer+1].weight.requires_grad = False
+            # model.layer[layer].bias.requires_grad = False
             # weighted_mask[layer].detach()# = False
 
             check_memory("1") #y \/
@@ -323,9 +323,9 @@ def remove_neurons(model, idx, weighted_mask):
                 requires_grad=False
             )
 
-            model.layer[layer].weight.requires_grad = True
-            model.layer[layer+1].weight.requires_grad = True
-            model.layer[layer].bias.requires_grad = True
+            # model.layer[layer].weight.requires_grad = True
+            # model.layer[layer+1].weight.requires_grad = True
+            # model.layer[layer].bias.requires_grad = True
             # weighted_mask[layer].requires_grad = False
         check_memory("before empty")
         torch.cuda.empty_cache()

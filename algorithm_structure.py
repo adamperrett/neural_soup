@@ -18,6 +18,7 @@ Building architecture:
 3. Combine dropout mask with error to approximate neuron fitness
     Keep track of mask used to extract important connections?
 4. Mate and mutate
+5. scale weights to match new layer size
 
 
 

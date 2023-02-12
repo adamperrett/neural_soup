@@ -22,7 +22,7 @@ num_epochs = 100
 lr = 0.008
 momentum = 0.9
 
-hidden_size = 128
+hidden_size = 1024
 
 trainset = datasets.MNIST('', download=True, train=True, transform=transforms.ToTensor())
 testset = datasets.MNIST('', download=True, train=False, transform=transforms.ToTensor())
@@ -83,15 +83,91 @@ class NeuralNet(nn.Module):
             self.fc1.weight.requires_grad = False
             self.fc2.weight.requires_grad = False
 
-            self.fc1.weight = nn.Parameter(torch.vstack([self.fc1.weight, torch.zeros([1, input_size])]))
-            self.fc1.bias = nn.Parameter(torch.hstack([self.fc1.bias, torch.zeros(1)]))
-            self.fc1.out_features += 1
-            self.fc2.weight = nn.Parameter(torch.hstack([self.fc2.weight, torch.zeros([num_classes, 1])]))
-            self.fc2.in_features += 1
+            # self.fc1.bias.requires_grad = True
+            # self.fc1.weight.requires_grad = True
+            # self.fc2.weight.requires_grad = True
+
+            # self.fc1.bias.detach()
+            # self.fc1.weight.detach()
+            # self.fc2.weight.detach()
+
+            new_fc1w = torch.vstack([self.fc1.weight.data, torch.zeros([1, input_size])])
+            new_fc1b = torch.hstack([self.fc1.bias.data, torch.zeros(1)])
+            new_fc2w = torch.hstack([self.fc2.weight.data, torch.zeros([num_classes, 1])])
+
+            # new_fc1w = self.fc1.weight.data
+            # new_fc1b = self.fc1.bias.data
+            # new_fc2w = self.fc2.weight.data
+
+            out1 = self.fc1.out_features + 1
+            in1 = self.fc2.in_features + 1
+
+            # del self.fc1
+            # del self.fc2
+            # torch.cuda.empty_cache()
+            #
+            # self.fc1 = nn.Linear(input_size, out1)
+            # self.fc2 = MyLinear(in1, num_classes, levels_of_dropout[0])
+
+            self.fc1.weight.data = new_fc1w
+            self.fc1.bias.data = new_fc1b
+            self.fc2.weight.data = new_fc2w
+
 
             self.fc1.bias.requires_grad = True
             self.fc1.weight.requires_grad = True
             self.fc2.weight.requires_grad = True
+
+            # self.fc1.weight = nn.Parameter(torch.zeros_like(self.fc1.weight, requires_grad=False))
+            # self.fc1.bias = nn.Parameter(torch.zeros_like(self.fc1.bias, requires_grad=False))
+            # self.fc1.out_features += 1
+            # self.fc2.weight = nn.Parameter(torch.zeros_like(self.fc2.weight, requires_grad=False))
+            # self.fc2.in_features += 1
+            # param_list_before = []
+            # param_list_after = []
+            # for param_idx, param in enumerate(self.parameters()):
+            #     param_list_before.append(param.data)
+            #
+            # for param_idx in range(len(param_list_before)):
+            #     if param_idx > 1:
+            #         param_list_after.append(param_list_before[param_idx])
+            #     else:
+            #         # param.data = nn.parameter.Parameter(torch.zeros_like(param))
+            #         # pre_data = param_list_before[param_idx].data
+            #         # post_data = param_list_before[param_idx+2].data
+            #         if len(param_list_before[param_idx].data.shape) == 1:
+            #             param_list_before[param_idx].data = nn.Parameter(torch.hstack([
+            #                 param_list_before[param_idx].data,
+            #                 torch.zeros_like(param_list_before[param_idx].data)[0].unsqueeze(0)]),
+            #             requires_grad=True)
+            #         else:
+            #             param_list_before[param_idx].data = nn.Parameter(torch.vstack([
+            #                 param_list_before[param_idx].data,
+            #                 torch.zeros_like(param_list_before[param_idx].data)[0].unsqueeze(0)]),
+            #             requires_grad=True)
+            #             param_list_before[param_idx+2].data = nn.Parameter(torch.hstack([
+            #                 param_list_before[param_idx+2].data,
+            #                 torch.zeros_like(param_list_before[param_idx+2].data)[:, 0].unsqueeze(1)]),
+            #             requires_grad=True)
+            #         param_list_after.append(param_list_before[param_idx])
+            #
+            # for param, new_param in zip(self.parameters(), param_list_after):
+            #     param.data = new_param
+            #
+            # param_list = []
+            # for param_idx, param in enumerate(self.parameters()):
+            #     param_list.append(param.data)
+
+            print("done params")
+
+
+            # self.fc1.bias.requires_grad = True
+            # self.fc1.weight.requires_grad = True
+            # self.fc2.weight.requires_grad = True
+
+            # self.fc1.bias.requires_grad = False
+            # self.fc1.weight.requires_grad = False
+            # self.fc2.weight.requires_grad = False
         # torch.cuda.empty_cache()
     #     # torch.hstack([self.weight, torch.ones([num_classes, 1])])
     #     # self.weight = nn.Parameter(torch.hstack([self.weight, torch.ones([num_classes, 1])]))
@@ -156,7 +232,8 @@ testing_accuracies = []
 for epoch in range(num_epochs):
     check_memory("start")
     loss_ = [0 for i in range(len(levels_of_dropout))]
-    for images, labels in train_loader:
+    for batch, (images, labels) in enumerate(train_loader):
+        # print("Starting batch", batch+1, "/", len(train_loader))
         # Flatten the input images of [28,28] to [1,784]
         images = images.reshape(-1, 784).to(torch.device(device))
 
@@ -178,8 +255,26 @@ for epoch in range(num_epochs):
         for i in range(len(levels_of_dropout)):
             loss_[i] += loss[i]
 
+        # check_memory("b")
+        # if epoch < 1:
         for p in models:
             models[p].add_neuron()
+
+        # output = []
+        # for p in models:
+        #     output.append(models[p](images))
+        #
+        # loss = []
+        # for out in output:
+        #     loss.append(lossFunction(out, labels))
+        #
+        # optimize_all.zero_grad()
+        #
+        # for l in loss:
+        #     l.backward()
+        #
+        # optimize_all.step()
+        # check_memory("a")
 
     for i in range(len(levels_of_dropout)):
         print("Epoch{}, Training {} loss:{}".format(epoch, levels_of_dropout[i], loss_[i] / len(train_loader)))
