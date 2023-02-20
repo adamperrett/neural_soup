@@ -31,18 +31,24 @@ Train an adaptive neuron. It starts as a triangle kernel and learns 'broader' re
 input_size = 28 * 28
 num_classes = 10
 num_epochs = 100
-lr = 0.008
-momentum = 0.9
-learning = 0
+lr = 0.0003
+momentum = 0.0000009
+learning = 1
+
+retest_rate = 100
 
 error_threshold = 0.3
+node = 0
+tri = 1
 
-parameter_settings = [0.075, 0.1, 0.125, 0.15]
+# parameter_settings = [0.075, 0.1, 0.125, 0.15]
+# parameter_settings = [0.04]
 # parameter_settings = [0.05, 0.075, 0.1, 0.125, 0.15, 0.175, 0.2, 0.3]
+parameter_settings = [0.1]
 colours = pl.cm.gist_rainbow(np.linspace(0, 1, len(parameter_settings)))
 
 
-test_label = "w{} et{} learning{}".format(parameter_settings, error_threshold, learning)
+test_label = "2n{}t{} w{} et{} learning{}".format(node, tri, parameter_settings, error_threshold, learning)
 
 batch_size_train = 32
 batch_size_test = 32
@@ -54,6 +60,25 @@ train_loader = torch.utils.data.DataLoader(trainset, batch_size=batch_size_train
 test_loader = torch.utils.data.DataLoader(testset, batch_size=batch_size_test,
                                           shuffle=True, generator=torch.Generator(device=device))
 
+
+class Triangle(nn.Module):
+    def __init__(self, mean, std):
+        super(Triangle, self).__init__()
+        # self.mean = torch.nn.Parameter(mean)
+        self.mean = mean
+        self.std = torch.nn.Parameter(torch.Tensor([std for i in range(len(mean))]))
+        # self.std = torch.nn.Parameter(std)
+        # self.std = std
+
+    def forward(self, x, batch_size):
+        broadcast = torch.transpose(torch.stack([self.mean for i in range(batch_size)]), 0, 1)
+        # broadcast = torch.transpose(torch.stack([self.mean for i in range(batch_size)]), 0, 1)
+        # tout = torch.exp((-(torch.sum(torch.square(broadcast - x), dim=2) / input_size) ** 2)/(2 * self.std.unsqueeze(1) ** 2))
+        tout = torch.max(torch.tensor(0), 1 - torch.transpose(torch.abs(broadcast - x), 0, 1) / self.std.unsqueeze(1))
+        # tout = torch.max(torch.tensor(0), 1 - torch.abs(broadcast - x) / self.std)
+        # tout = torch.exp((-(torch.sum(torch.square(broadcast - x), dim=2) / input_size) ** 2)/(2 * self.std ** 2))
+        # tout = torch.exp((-(torch.sum(torch.abs(broadcast - x), dim=2) / input_size) ** 2)/(2 * self.std ** 2))
+        return torch.transpose(tout, 0, 1)
 
 class Gaussian(nn.Module):
 
@@ -70,6 +95,40 @@ class Gaussian(nn.Module):
         # return torch.clamp(gauss, min=self.min, max=self.max)
         return gauss
 
+class Node_Triangle(nn.Module):
+    def __init__(self, mean, std):
+        super(Node_Triangle, self).__init__()
+        # self.mean = torch.nn.Parameter(mean)
+        self.mean = mean
+        # self.std = torch.nn.Parameter(torch.Tensor([std for i in range(len(mean))]))
+        self.std = std
+
+    def forward(self, x, batch_size):
+        broadcast = torch.transpose(torch.stack([self.mean for i in range(batch_size)]), 0, 1)
+        # broadcast = torch.transpose(torch.stack([self.mean for i in range(batch_size)]), 0, 1)
+        # tout = torch.exp((-(torch.sum(torch.square(broadcast - x), dim=2) / input_size) ** 2)/(2 * self.std.unsqueeze(1) ** 2))
+        tout = torch.max(torch.tensor(0), 1 - (torch.sum(torch.square(broadcast - x), dim=2) / input_size) / self.std)
+        # tout = torch.exp((-(torch.sum(torch.square(broadcast - x), dim=2) / input_size) ** 2)/(2 * self.std ** 2))
+        # tout = torch.exp((-(torch.sum(torch.abs(broadcast - x), dim=2) / input_size) ** 2)/(2 * self.std ** 2))
+        return tout
+
+class Node_Gaussian(nn.Module):
+
+    def __init__(self, mean=0, std=1):
+        super(Node_Gaussian, self).__init__()
+        self.mean = torch.nn.Parameter(mean)
+        # self.mean = mean
+        self.std = torch.nn.Parameter(torch.Tensor([std for i in range(len(mean))]))
+        # self.std = std
+
+    def forward(self, x, batch_size):
+        broadcast = torch.transpose(torch.stack([self.mean for i in range(batch_size)]), 0, 1)
+        # broadcast = torch.transpose(torch.stack([self.mean for i in range(batch_size)]), 0, 1)
+        gauss = torch.exp((-(torch.sum(torch.square(broadcast - x), dim=2) / input_size) ** 2)/(2 * self.std.unsqueeze(1) ** 2))
+        # gauss = torch.exp((-(torch.sum(torch.square(broadcast - x), dim=2) / input_size) ** 2)/(2 * self.std ** 2))
+        # gauss = torch.exp((-(torch.sum(torch.abs(broadcast - x), dim=2) / input_size) ** 2)/(2 * self.std ** 2))
+        return gauss
+
 class Average_with_mask(nn.Module):
     def __init__(self, mask):
         super(Average_with_mask, self).__init__()
@@ -83,17 +142,28 @@ class Average_with_mask(nn.Module):
 
 # Fully connected neural network with one hidden layer
 class NeuralNet(nn.Module):
-    def __init__(self, num_classes, centres, synapse_mask, output_errors, stdev):
+    def __init__(self, num_classes, centres, synapse_mask, output_errors, stdev, node=True, tri=True):
         super(NeuralNet, self).__init__()
         self.hidden_size = len(centres)
         self.synapse_mask = synapse_mask
+        self.node = node
 
-        self.act_hidden = Gaussian(mean=centres, std=stdev)
-        self.average_synapses = Average_with_mask(synapse_mask)
-        self.output_conn = nn.Linear(self.hidden_size, num_classes)
+        if node:
+            if tri:
+                self.act_hidden = Node_Triangle(mean=centres, std=stdev)
+            else:
+                self.act_hidden = Node_Gaussian(mean=centres, std=stdev)
+        else:
+            if tri:
+                self.act_hidden = Triangle(mean=centres, std=stdev)
+            else:
+                self.act_hidden = Gaussian(mean=centres, std=stdev)
+            self.average_synapses = Average_with_mask(synapse_mask)
+            self.act_out = Gaussian(mean=torch.ones(self.hidden_size), std=stdev)
+        self.output_conn = nn.Linear(self.hidden_size, num_classes, bias=False)
         self.output_conn.weight.data = output_errors
-        self.output_conn.bias.data = torch.zeros_like(self.output_conn.bias.data)
-        self.act_out = Gaussian(mean=torch.ones(self.hidden_size), std=stdev)
+        self.output_conn.weight.requires_grad = False
+        # self.output_conn.bias.data = torch.zeros_like(self.output_conn.bias.data)
         # self.act_out = Gaussian(mean=torch.Tensor(1), std=stdev)
         # self.output_act = nn.LogSoftmax(dim=1)
         self.output_act = nn.Softmax(dim=1)
@@ -102,8 +172,9 @@ class NeuralNet(nn.Module):
         batch_size = len(x)
         # out = self.input_conn(x)
         out = self.act_hidden(x, batch_size)
-        out = self.average_synapses(out)
-        out = self.act_out(out, batch_size)
+        if not self.node:
+            out = self.average_synapses(out)
+            out = self.act_out(out, batch_size)
         out = self.output_conn(torch.transpose(out, 0, 1))
         out = self.output_act(out)
         return out
@@ -124,6 +195,8 @@ def make_network(new_centres, new_mask, errors, old_model=False):
         for width, m, new_c, new_m, e in zip(parameter_settings, old_model, new_centres, new_mask, errors):
             # check_memory("mn")
             if not len(new_c):
+                models['{}'.format(width)] = old_model['{}'.format(width)]
+                new_params.append({'params': old_model['{}'.format(width)].parameters()})
                 continue
             old_centres = old_model[m].act_hidden.mean
             old_weights = old_model[m].output_conn.weight.data
@@ -133,6 +206,8 @@ def make_network(new_centres, new_mask, errors, old_model=False):
                                                    centres=torch.vstack([old_centres, new_c]),
                                                    synapse_mask=torch.vstack([old_mask, new_m]),
                                                    output_errors=torch.hstack([old_weights, e]),
+                                                   node=node,
+                                                   tri=tri,
                                                    stdev=width).to(device)
             # check_memory("mnn")
             new_params.append({'params': models['{}'.format(width)].parameters()})
@@ -144,11 +219,13 @@ def make_network(new_centres, new_mask, errors, old_model=False):
                                                    centres=new_centres,
                                                    synapse_mask=new_mask,
                                                    output_errors=errors,
+                                                   node=node,
+                                                   tri=tri,
                                                    stdev=width).to(device)
             new_params.append({'params': models['{}'.format(width)].parameters()})
 
-    lossFunction = nn.NLLLoss(reduction='none')
-    # lossFunction = nn.CrossEntropyLoss(reduction='none')
+    # lossFunction = nn.NLLLoss(reduction='none')
+    lossFunction = nn.CrossEntropyLoss(reduction='none')
     optimize_all = optim.SGD(new_params,
                              lr=lr, momentum=momentum)
     return models, lossFunction, optimize_all
@@ -205,70 +282,70 @@ for epoch in range(num_epochs):
     for p in models:
         models[p].train()
     loss_ = [0 for i in range(len(parameter_settings))]
-    with torch.no_grad():
-        for batch, (images, labels) in enumerate(train_loader):
-            # check_memory("batch")
-            print("Starting batch", batch+1, "/", len(train_loader))
-            if not batch and not epoch:
-                continue
-            images = images.reshape(-1, 784).to(torch.device(device))
+    # with torch.no_grad():
+    for batch, (images, labels) in enumerate(train_loader):
+        # check_memory("batch")
+        print("Starting batch", batch+1, "/", len(train_loader))
+        if not batch and not epoch:
+            continue
+        images = images.reshape(-1, 784).to(torch.device(device))
 
-            output = []
-            for p in models:
-                output.append(models[p](images))
-            # check_memory("forward")
+        output = []
+        for p in models:
+            output.append(models[p](images))
+        # check_memory("forward")
 
-            loss = []
-            example_loss = []
-            for out in output:
-                loss_each = lossFunction(out, labels)
-                example_loss.append(loss_each)
-                loss.append(torch.mean(loss_each))
-            # check_memory("loss")
+        loss = []
+        example_loss = []
+        for out in output:
+            loss_each = lossFunction(out, labels)
+            example_loss.append(loss_each)
+            loss.append(torch.mean(loss_each))
+        # check_memory("loss")
 
-            optimize_all.zero_grad()
+        optimize_all.zero_grad()
 
-            if learning:
-                for l in loss:
-                    l.backward()
-                optimize_all.step()
-            # check_memory("learning")
+        if learning and epoch:
+            for l in loss:
+                l.backward()
+            optimize_all.step()
+        # check_memory("learning")
 
-            if not stop_growing:
-                centres, mask, errors = neurogen_process(images, output, labels, example_loss)
-                # check_memory("process")
+        if not stop_growing and not epoch:
+            centres, mask, errors = neurogen_process(images, output, labels, example_loss)
+            # check_memory("process")
 
-                models, lossFunction, optimize_all = make_network(new_centres=centres,
-                                                                  new_mask=mask,
-                                                                  errors=errors,
-                                                                  old_model=models)
-                # check_memory("make")
-
-                with torch.no_grad():
+            models, lossFunction, optimize_all = make_network(new_centres=centres,
+                                                              new_mask=mask,
+                                                              errors=errors,
+                                                              old_model=models)
+            # check_memory("make")
+        if (batch-1) % retest_rate == 0:
+            with torch.no_grad():
+                for p in models:
+                    models[p].eval()
+                correct = [0 for i in range(len(parameter_settings))]
+                total = 0
+                for images, labels in test_loader:
+                    images = images.reshape(-1, 784).to(torch.device(device))
+                    out = []
                     for p in models:
-                        models[p].eval()
-                    correct = [0 for i in range(len(parameter_settings))]
-                    total = 0
-                    for images, labels in test_loader:
-                        images = images.reshape(-1, 784).to(torch.device(device))
-                        out = []
-                        for p in models:
-                            out.append(models[p](images))
-                        predicted = []
-                        for o in out:
-                            _, pred = torch.max(o, 1)
-                            predicted.append(pred)
-                        for i in range(len(parameter_settings)):
-                            correct[i] += (predicted[i] == labels).sum().item()
-                        total += labels.size(0)
-                    print(test_label)
+                        out.append(models[p](images))
+                    predicted = []
+                    for o in out:
+                        _, pred = torch.max(o, 1)
+                        predicted.append(pred)
                     for i in range(len(parameter_settings)):
-                        print('Testing accuracy: {} %  {}'.format(100 * correct[i] / total, parameter_settings[i]))
-                    testing_accuracies.append(100 * np.array(correct) / total)
-            # check_memory("loss2")
-            for i in range(len(parameter_settings)):
-                loss_[i] += loss[i].detach()
-            torch.cuda.empty_cache()
+                        correct[i] += (predicted[i] == labels).sum().item()
+                    total += labels.size(0)
+                print(test_label)
+                for i in range(len(parameter_settings)):
+                    print('Testing accuracy: {} %  {} n{}'.format(100 * correct[i] / total, parameter_settings[i], models['{}'.format(parameter_settings[i])].hidden_size))
+                testing_accuracies.append(100 * np.array(correct) / total)
+        # check_memory("loss2")
+        for i in range(len(parameter_settings)):
+            loss_[i] += loss[i].detach()
+        torch.cuda.empty_cache()
 
     for i in range(len(parameter_settings)):
         print("Epoch{}, Training loss:{} types:{}".format(epoch,
@@ -303,7 +380,7 @@ for epoch in range(num_epochs):
         print("plotting")
         plt.figure()
         for i, p, in enumerate(models):
-            print("\n", np.max(np.array(testing_accuracies).astype(float)[:, i]), p, "\n", np.array(testing_accuracies).astype(float)[:, i])
+            print("\n", np.max(np.array(testing_accuracies).astype(float)[:, i]), p, models[p].hidden_size, "\n", np.array(testing_accuracies).astype(float)[:, i])
             plt.plot([x for x in range(len(np.array(testing_accuracies).astype(float)[:, i]))],
                      np.array(testing_accuracies).astype(float)[:, i], label=p, color=colours[i])
         plt.ylim([85, 100])
