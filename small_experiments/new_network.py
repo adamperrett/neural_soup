@@ -31,28 +31,30 @@ num_epochs = 1000
 lr = 0.05
 momentum = 0.9
 
-hidden_size = [1024, 1024]
+hidden_size = [2000]
 
 in_out_neurons = 10
-evo_rate = 60
+evo_rate = 6000
 mutate_stdev = 0.03
 rate_reduction = 1.05
 
 # levels_of_dropout = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95]
 levels_of_dropout = [0.5]
-neuron_types = [['relu'],
-                ['tanh'],
+neuron_types = [
+    # ['relu'],
+    #             ['tanh'],
                 ['sig'],
-                ['gauss'],
-                ['smin'],
-                ['smax'],
-                ['smin', 'smax'],
-                ['gelu'],
-                ['lrelu'],
-                ['relu', 'tanh', 'sig'],
-                ['relu', 'gelu', 'lrelu'],
-                ['relu', 'tanh', 'sig', 'gelu', 'lrelu', 'gauss'],
-                ['relu', 'tanh', 'sig', 'smin', 'smax', 'gelu', 'lrelu', 'gauss']]
+                # ['gauss'],
+                # # ['smin'],
+                # # ['smax'],
+                # # ['smin', 'smax'],
+                # ['gelu'],
+                # ['lrelu'],
+                # ['relu', 'tanh', 'sig'],
+                # ['relu', 'gelu', 'lrelu'],
+                # ['relu', 'tanh', 'sig', 'gelu', 'lrelu', 'gauss'],
+                # ['relu', 'tanh', 'sig', 'smin', 'smax', 'gelu', 'lrelu', 'gauss']
+]
 colours = pl.cm.gist_rainbow(np.linspace(0, 1, len(neuron_types)))
 
 test_label = "new_neuron{}x{}x{}+-{} drop{} hidden_size{} lr{} bs{}".format(
@@ -187,7 +189,7 @@ class NeuralNet(nn.Module):
             masks.append(mask)
         else:
             out = self.layer[-1](out)
-        out = self.LogSoftmax(out)
+        # out = self.LogSoftmax(out)
         return out, masks
 
 def check_memory(where=''):
@@ -344,7 +346,8 @@ def make_network(from_weights=False, old_size=[0]):
                                                neuron_types=nt, p=levels_of_dropout[0]).to(device)
             new_params.append({'params': models['{}'.format(nt)].parameters()})
 
-    lossFunction = nn.NLLLoss(reduction='none')
+    # lossFunction = nn.NLLLoss(reduction='none')
+    lossFunction = nn.CrossEntropyLoss(reduction='none')
     optimize_all = optim.SGD(new_params,
                              lr=lr, momentum=momentum)
     return models, lossFunction, optimize_all, model_sizes

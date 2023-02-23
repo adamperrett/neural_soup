@@ -173,10 +173,10 @@ for images, labels in tqdm(train_loader):
 
         for output, ow in enumerate(out_w):
             if ow < 0:
-                temp = torch.tensor(neuron_vex_legendre_m[:, :, output])
+                temp = neuron_vex_legendre_m[:, :, output].clone().detach()
                 neuron_vex_legendre_m[:, :, output] = neuron_cave_legendre_m[:, :, output]
                 neuron_cave_legendre_m[:, :, output] = temp
-                temp = torch.tensor(neuron_cave_total[:, output])
+                temp = neuron_cave_total[:, output].clone().detach()
                 neuron_cave_total[:, output] = neuron_vex_total[:, output]
                 neuron_vex_total[:, output] = temp
 

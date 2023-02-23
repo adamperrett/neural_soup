@@ -12,8 +12,8 @@ import seaborn as sns
 import gc
 import itertools
 from tqdm import tqdm
-from Legendre.train_mnist import NeuralNet
-
+from Legendre.train_2D import NeuralNet
+from Legendre.train_2D import generate_corner_2class_data, generate_xor_data
 sns.set_theme(style="whitegrid")
 
 gpu = True
@@ -24,7 +24,9 @@ else:
     torch.set_default_tensor_type(torch.FloatTensor)
     device = 'cpu'
 
-batch_size = 64
+torch.manual_seed(272727)
+print("generating data")
+batch_size = 128
 trainset = datasets.MNIST('', download=True, train=True, transform=transforms.ToTensor())
 testset = datasets.MNIST('', download=True, train=False, transform=transforms.ToTensor())
 train_loader = torch.utils.data.DataLoader(trainset, batch_size=batch_size,
@@ -32,80 +34,139 @@ train_loader = torch.utils.data.DataLoader(trainset, batch_size=batch_size,
 test_loader = torch.utils.data.DataLoader(testset, batch_size=batch_size,
                                           shuffle=True, generator=torch.Generator(device=device))
 
-# net_file = 'mnist sigmoid hidden_size[200] test_acc[92.28].pt'
-net_file = 'mnist sigmoid hidden_size[20] test_acc[92.31].pt'
+print("loading net")
+# net_file = 'mnist sigmoid hidden_size[2000] test_acc[98.1].pt'
+net_file = 'mnist sigmoid hidden_size[200] test_acc[98.05].pt'
 model = torch.load(net_file)
 
-def Sig(x, w, b):
-        out = 1 / (1 + torch.exp(-(x * w) + b))
-        return out
+def Sig(x, w, b, out_w):
+    out = out_w.unsqueeze(1) / (1 + torch.exp(-torch.sum(x * w, dim=1) - b))
+    return torch.transpose(out, 0, 1)
 
-def VexSig(x, w, b):
-        c = torch.square(w) * 0.05
-        out = 1 / (1 + torch.exp(-(x * w) + b)) + (c * torch.square(x))
-        return out
 
-def VexDer(x, w, b):
-        c = torch.square(w) * 0.05
-        sig = 1 / (1 + torch.exp(-(x * w) + b))
-        out = w * sig * (1 - sig) + (2 * c * x)
-        return out
+def CaVexSig(x, w, b, out_w, vex):
+    c = torch.matmul(torch.square(w).unsqueeze(1) * 0.5, out_w.unsqueeze(0))
+    if vex:
+        out = Sig(x, w, b, out_w) + torch.matmul(torch.square(x), c)
+    else:
+        out = Sig(x, w, b, out_w) - torch.matmul(torch.square(x), c)
+    return out
 
-def CaveSig(x, w, b):
-        c = torch.square(w) * 0.05
-        out = 1 / (1 + torch.exp(-(x * w) + b)) + (c * torch.square(x))
-        return out
 
-def CaveDer(x, w, b):
-        c = torch.square(w) * 0.05
-        sig = 1 / (1 + torch.exp(-(x * w) + b))
-        out = w * sig * (1 - sig) - (2 * c * x)
-        return out
+def CaVexDer(x, w, b, out_w, vex):
+    c = torch.matmul(torch.square(w).unsqueeze(1) * 0.5, out_w.unsqueeze(0))
+    sig = 1 / (1 + torch.exp(-torch.sum(x * w, dim=1) - b))
+    w_scale = torch.matmul(w.unsqueeze(1), out_w.unsqueeze(0))
+    input_const = (2 * torch.stack([position.unsqueeze(1) * c for position in x]))
+    sig_derivative = (sig * (1 - sig))
+    if vex:
+        out = torch.stack([w_scale * der for der in sig_derivative]) + input_const
+    else:
+        out = torch.stack([w_scale * der for der in sig_derivative]) - input_const
+    return out
+
+def piecewise_value(x, legendre_m, legendre_c, vex=True, soft=False):
+    y = []
+    for m, c in zip(legendre_m, legendre_c):
+        mx = torch.matmul(x, m)
+        y.append((mx + c) / legendre_scale_factor)
+    y = torch.stack(y)
+    if soft:
+        temperature = .01
+        if vex:
+            return torch.sum(y * torch.exp(y / temperature) / torch.sum(torch.exp(y / temperature)))
+        else:
+            return torch.sum(y * torch.exp(-y / temperature) / torch.sum(torch.exp(-y / temperature)))
+    else:
+        if vex:
+            return torch.max(y, dim=0)[0]
+        else:
+            return torch.min(y, dim=0)[0]
 
 
 full_vex_legendre_m = []
 full_cave_legendre_m = []
 full_vex_legendre_c = []
 full_cave_legendre_c = []
-legendre_scale_factor = 10e3
+legendre_scale_factor = 1#0e3
 
 hidden_size = model.layer[0].bias.shape[0]
-net_values = [[] for i in range(hidden_size)]
-net_total = []
-vex_values = [[] for i in range(hidden_size)]
+# net_values = [[] for i in range(hidden_size)]
+# net_total = []
+# vex_values = [[] for i in range(hidden_size)]
 vex_total = []
-cave_values = [[] for i in range(hidden_size)]
+# cave_values = [[] for i in range(hidden_size)]
 cave_total = []
 
-for images, labels in train_loader:
+print("extracting Legendre transform")
+for images, labels in tqdm(train_loader):
     images = images.reshape(-1, 784).to(torch.device(device))
-    for i, (w, b, out_w, out_b) in enumerate(zip(model.layer[0].weight.data,
+    for i, (w, b, out_w) in enumerate(zip(model.layer[0].weight.data,
                                    model.layer[0].bias.data,
-                                   model.layer[1].weight.data,
-                                   model.layer[1].bias.data
+                                   torch.transpose(model.layer[1].weight.data, 0, 1)
                                    )):
-        net_values[i].append(Sig(images, w, b))
-        vex_values[i].append(VexSig(images, w, b))
-        cave_values[i].append(CaveSig(images, w, b))
+
+        # net_values[i].append(Sig(images, w, b, out_w))
+        # vex_values[i].append(CaVexSig(images, w, b, out_w, True))
+        # cave_values[i].append(CaVexSig(images, w, b, out_w, False))
+        neuron_vex_total = CaVexSig(images, w, b, out_w, True)
+        neuron_cave_total = CaVexSig(images, w, b, out_w, False)
+        neuron_vex_legendre_m = CaVexDer(images, w, b, out_w, True)
+        neuron_cave_legendre_m = CaVexDer(images, w, b, out_w, False)
+
+        for output, ow in enumerate(out_w):
+            if ow < 0:
+                temp = neuron_vex_legendre_m[:, :, output].clone().detach()
+                neuron_vex_legendre_m[:, :, output] = neuron_cave_legendre_m[:, :, output]
+                neuron_cave_legendre_m[:, :, output] = temp
+                temp = neuron_cave_total[:, output].clone().detach()
+                neuron_cave_total[:, output] = neuron_vex_total[:, output]
+                neuron_vex_total[:, output] = temp
+
         if not i:
-            net_total.append(net_values[i][-1])
-            full_vex_legendre_m.append(VexDer(images, w, b))
-            vex_total.append(vex_values[i][-1])
-            full_cave_legendre_m.append(CaveDer(images, w, b))
-            cave_total.append(cave_values[i][-1])
+            # net_total.append(net_values[i][-1])
+            full_vex_legendre_m.append(neuron_vex_legendre_m)
+            vex_total.append(neuron_vex_total)
+            full_cave_legendre_m.append(neuron_cave_legendre_m)
+            cave_total.append(neuron_cave_total)
         else:
-            net_total[-1] += net_values[i][-1]
-            full_vex_legendre_m[-1] += VexDer(images, w, b)
-            vex_total[-1] += vex_values[i][-1]
-            full_cave_legendre_m[-1] += CaveDer(images, w, b)
-            cave_total[-1] += cave_values[i][-1]
+            # net_total[-1] += net_values[i][-1]
+            full_vex_legendre_m[-1] += neuron_vex_legendre_m
+            vex_total[-1] += neuron_vex_total
+            full_cave_legendre_m[-1] += neuron_cave_legendre_m
+            cave_total[-1] += neuron_cave_total
 
-    full_vex_legendre_c.append(vex_total[-1] - torch.sum(full_vex_legendre_m[-1] * images))
-    full_cave_legendre_c.append(cave_total[-1] - torch.sum(full_cave_legendre_m[-1] * images))
+    # real_net = model(images)
 
+    full_vex_legendre_c.append(vex_total[-1] - torch.stack(
+        [torch.matmul(im, f) for f, im in zip(full_vex_legendre_m[-1], images)]))
+    full_cave_legendre_c.append(cave_total[-1] - torch.stack(
+        [torch.matmul(im, f) for f, im in zip(full_cave_legendre_m[-1], images)]))
+
+torch.cuda.empty_cache()
 full_vex_legendre_m = torch.vstack(full_vex_legendre_m)
 full_vex_legendre_c = torch.vstack(full_vex_legendre_c)
 full_cave_legendre_m = torch.vstack(full_cave_legendre_m)
 full_cave_legendre_c = torch.vstack(full_cave_legendre_c)
+
+with torch.no_grad():
+    correct_m = 0
+    correct_l = 0
+    total = 0
+    for images, labels in tqdm(test_loader):
+        images = images.reshape(-1, 784).to(torch.device(device))
+        out_m = model(images)
+        _, pred = torch.max(out_m, 1)
+        correct_m += (pred == labels).sum().item()
+
+        vex = piecewise_value(images, full_vex_legendre_m, full_vex_legendre_c)
+        cave = piecewise_value(images, full_vex_legendre_m, full_vex_legendre_c, vex=False)
+        out_l = (vex + cave) * legendre_scale_factor / 2
+        correct_l += (pred == labels).sum().item()
+
+        total += labels.size(0)
+    print('Model testing accuracy: {} %'.format(100 * correct_m / total))
+    print('Legendre testing accuracy: {} %'.format(100 * correct_m / total))
+    # testing_accuracies = 100 * np.array(correct) / total
 
 print("Done")

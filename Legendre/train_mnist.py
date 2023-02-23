@@ -16,22 +16,6 @@ else:
     torch.set_default_tensor_type(torch.FloatTensor)
     device = 'cpu'
 
-input_size = 28 * 28
-num_classes = 10
-batch_size = 64
-num_epochs = 10
-lr = 0.008
-momentum = 0.9
-
-hidden_size = [20]
-
-trainset = datasets.MNIST('', download=True, train=True, transform=transforms.ToTensor())
-testset = datasets.MNIST('', download=True, train=False, transform=transforms.ToTensor())
-train_loader = torch.utils.data.DataLoader(trainset, batch_size=batch_size,
-                                           shuffle=True, generator=torch.Generator(device=device))
-test_loader = torch.utils.data.DataLoader(testset, batch_size=batch_size,
-                                          shuffle=True, generator=torch.Generator(device=device))
-
 
 class MyDropout(nn.Module):
     def __init__(self, p: float = 0.5):
@@ -80,7 +64,7 @@ class NeuralNet(nn.Module):
             self.splits.append(np.random.choice(self.neuron_types, hidden_size[i + 1]))
             self.act_idxs.append({n_type: np.where(self.splits[-1] == n_type)[0] for n_type in self.neuron_types})
 
-        self.layer.append(nn.Linear(hidden_size[-1], num_classes))
+        self.layer.append(nn.Linear(hidden_size[-1], num_classes, bias=False))
 
         self.functions = {'relu': nn.ReLU(),
                           'tanh': nn.Tanh(),
@@ -107,12 +91,12 @@ class NeuralNet(nn.Module):
 
     def forward(self, x):
         out = self.layer[0](x)
-        # out = self.mixed_act(out, 0)
+        out = self.mixed_act(out, 0)
         for i in range(1, len(self.layer) - 1):
             out = self.layer[i](out)
             out = self.mixed_act(out, i)
         out = self.layer[-1](out)
-        out = self.LogSoftmax(out)
+        # out = self.LogSoftmax(out)
         return out
 
 
@@ -128,9 +112,17 @@ def check_memory(where=''):
 
 if __name__ == '__main__':
 
+    input_size = 28 * 28
+    num_classes = 10
+    num_epochs = 100
+    lr = 0.05
+    momentum = 0.9
+
+    hidden_size = [200]
     # levels_of_dropout = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95]
     levels_of_dropout = [0.5]
-    neuron_types = [  # ['relu'],
+    neuron_types = [
+        # ['relu'],
         # ['tanh'],
         ['sig'],
         # ['smin'],
@@ -143,6 +135,13 @@ if __name__ == '__main__':
         # ['relu', 'tanh', 'sig', 'gelu', 'lrelu'],
         # ['relu', 'tanh', 'sig', 'smin', 'smax', 'gelu', 'lrelu']
     ]
+    batch_size = 128
+    trainset = datasets.MNIST('', download=True, train=True, transform=transforms.ToTensor())
+    testset = datasets.MNIST('', download=True, train=False, transform=transforms.ToTensor())
+    train_loader = torch.utils.data.DataLoader(trainset, batch_size=batch_size,
+                                               shuffle=True, generator=torch.Generator(device=device))
+    test_loader = torch.utils.data.DataLoader(testset, batch_size=batch_size,
+                                              shuffle=True, generator=torch.Generator(device=device))
 
     models = {}
     params = []
@@ -152,7 +151,8 @@ if __name__ == '__main__':
                                             neuron_types=nt, p=levels_of_dropout[0]).to(device)
         params.append({'params': models['{}'.format(nt)].parameters()})
 
-    lossFunction = nn.NLLLoss()
+    # lossFunction = nn.NLLLoss()
+    lossFunction = nn.CrossEntropyLoss()
     optimize_all = optim.SGD(params,
                              lr=lr, momentum=momentum)
 
@@ -160,7 +160,7 @@ if __name__ == '__main__':
     testing_accuracies = []
 
     for epoch in range(num_epochs):
-        check_memory("start")
+        # check_memory("start")
         loss_ = [0 for i in range(len(neuron_types))]
         for images, labels in train_loader:
             # Flatten the input images of [28,28] to [1,784]
