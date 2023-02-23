@@ -16,12 +16,12 @@ sns.set_theme(style="whitegrid")
 
 
 def sigmoid(x, w, b):
-    return 1 / (1 + np.exp(-(w * x) + b))
+    return 1 / (1 + np.exp(-(w * x) - b))
 
 
 def vex_sigmoid(x, w, b):
     c = np.square(w) * 0.05
-    return 1 / (1 + np.exp(-(w * x) + b)) + c * (x ** 2)
+    return 1 / (1 + np.exp(-(w * x) - b)) + c * (x ** 2)
 
 
 def vex_der(x, w, b):
@@ -32,7 +32,7 @@ def vex_der(x, w, b):
 
 def cave_sigmoid(x, w, b):
     c = np.square(w) * 0.05
-    return 1 / (1 + np.exp(-(w * x) + b)) - c * (x ** 2)
+    return 1 / (1 + np.exp(-(w * x) - b)) - c * (x ** 2)
 
 
 def cave_der(x, w, b):

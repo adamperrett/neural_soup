@@ -16,15 +16,6 @@ else:
     torch.set_default_tensor_type(torch.FloatTensor)
     device = 'cpu'
 
-input_size = 2
-num_classes = 2
-batch_size = 64
-num_epochs = 100
-lr = 0.003
-momentum = 0.9
-
-hidden_size = [8]
-
 class MyDropout(nn.Module):
     def __init__(self, p: float = 0.5):
         super(MyDropout, self).__init__()
@@ -72,7 +63,7 @@ class NeuralNet(nn.Module):
             self.splits.append(np.random.choice(self.neuron_types, hidden_size[i + 1]))
             self.act_idxs.append({n_type: np.where(self.splits[-1] == n_type)[0] for n_type in self.neuron_types})
 
-        self.layer.append(nn.Linear(hidden_size[-1], num_classes))
+        self.layer.append(nn.Linear(hidden_size[-1], num_classes, bias=False))
 
         self.functions = {'relu': nn.ReLU(),
                           'tanh': nn.Tanh(),
@@ -99,11 +90,12 @@ class NeuralNet(nn.Module):
 
     def forward(self, x):
         out = self.layer[0](x)
+        out = self.mixed_act(out, 0)
         for i in range(1, len(self.layer) - 1):
             out = self.layer[i](out)
             out = self.mixed_act(out, i)
         out = self.layer[-1](out)
-        out = self.LogSoftmax(out)
+        # out = self.LogSoftmax(out)
         return out
 
 
@@ -137,6 +129,12 @@ def generate_corner_2class_data(batch_size=32, batches=40):
         for b in range(batch_size):
             x = torch.rand(1) * 2 - 1
             y = torch.rand(1) * 2 - 1
+            # x = torch.round(torch.rand(1) * 3 - 1.5).type(torch.int).type(torch.float32)
+            # y = torch.round(torch.rand(1) * 3 - 1.5).type(torch.int).type(torch.float32)
+            # x = torch.ones(1) * -1
+            # y = torch.ones(1) * -1
+            # x = torch.zeros(1)
+            # y = torch.zeros(1)
             batch_d.append(torch.tensor([x, y]))
             batch_l.append(torch.Tensor(x < 0 and y < 0).type(torch.int64))
         data.append([torch.vstack(batch_d), torch.vstack(batch_l).squeeze()])
@@ -146,6 +144,15 @@ def generate_corner_2class_data(batch_size=32, batches=40):
 if __name__ == '__main__':
 
     torch.manual_seed(272727)
+
+    input_size = 2
+    num_classes = 2
+    batch_size = 64
+    num_epochs = 500
+    lr = 0.008
+    momentum = 0.9
+
+    hidden_size = [3]
 
     # levels_of_dropout = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95]
     levels_of_dropout = [0.5]
@@ -157,10 +164,6 @@ if __name__ == '__main__':
         # ['smin', 'smax'],
         # ['gelu'],
         # ['lrelu'],
-        # ['relu', 'tanh', 'sig'],
-        # ['relu', 'gelu', 'lrelu'],
-        # ['relu', 'tanh', 'sig', 'gelu', 'lrelu'],
-        # ['relu', 'tanh', 'sig', 'smin', 'smax', 'gelu', 'lrelu']
     ]
 
     models = {}
@@ -171,12 +174,14 @@ if __name__ == '__main__':
                                             neuron_types=nt, p=levels_of_dropout[0]).to(device)
         params.append({'params': models['{}'.format(nt)].parameters()})
 
-    lossFunction = nn.NLLLoss()
+    lossFunction = nn.CrossEntropyLoss()
     optimize_all = optim.SGD(params,
                              lr=lr, momentum=momentum)
 
     train_loader = generate_corner_2class_data(batches=40, batch_size=batch_size)
     test_loader = generate_corner_2class_data(batches=10, batch_size=batch_size)
+    # train_loader = generate_xor_data(batches=40, batch_size=batch_size)
+    # test_loader = generate_xor_data(batches=10, batch_size=batch_size)
 
     training_losses = []
     testing_accuracies = []
@@ -238,6 +243,7 @@ if __name__ == '__main__':
 
     test_label = "hidden_size{} test_acc{}".format(hidden_size, testing_accuracies[-1])
     for m in models:
-        torch.save(models[m], 'corner sigmoid {}.pt'.format(test_label))
+        # torch.save(models[m], 'xor sigmoid nosoftorbias {}.pt'.format(test_label))
+        torch.save(models[m], 'corner sigmoid nosoftorbias {}.pt'.format(test_label))
 
     print('done')

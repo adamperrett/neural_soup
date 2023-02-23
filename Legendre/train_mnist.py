@@ -75,9 +75,9 @@ class NeuralNet(nn.Module):
         self.splits = [np.random.choice(self.neuron_types, hidden_size[0])]
         self.act_idxs = [{n_type: np.where(self.splits[-1] == n_type)[0] for n_type in self.neuron_types}]
 
-        for i in range(len(hidden_size)-1):
-            self.layer.append(nn.Linear(hidden_size[i], hidden_size[i+1]))
-            self.splits.append(np.random.choice(self.neuron_types, hidden_size[i+1]))
+        for i in range(len(hidden_size) - 1):
+            self.layer.append(nn.Linear(hidden_size[i], hidden_size[i + 1]))
+            self.splits.append(np.random.choice(self.neuron_types, hidden_size[i + 1]))
             self.act_idxs.append({n_type: np.where(self.splits[-1] == n_type)[0] for n_type in self.neuron_types})
 
         self.layer.append(nn.Linear(hidden_size[-1], num_classes))
@@ -107,12 +107,14 @@ class NeuralNet(nn.Module):
 
     def forward(self, x):
         out = self.layer[0](x)
+        # out = self.mixed_act(out, 0)
         for i in range(1, len(self.layer) - 1):
             out = self.layer[i](out)
             out = self.mixed_act(out, i)
         out = self.layer[-1](out)
         out = self.LogSoftmax(out)
         return out
+
 
 def check_memory(where=''):
     print(where)
@@ -123,99 +125,101 @@ def check_memory(where=''):
     print("   total     reserved     allocated     free")
     print(["{0:.2E}".format(thing) for thing in [t, r, a, f]])
 
-# levels_of_dropout = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95]
-levels_of_dropout = [0.5]
-neuron_types = [#['relu'],
-                # ['tanh'],
-                ['sig'],
-                # ['smin'],
-                # ['smax'],
-                # ['smin', 'smax'],
-                # ['gelu'],
-                # ['lrelu'],
-                # ['relu', 'tanh', 'sig'],
-                # ['relu', 'gelu', 'lrelu'],
-                # ['relu', 'tanh', 'sig', 'gelu', 'lrelu'],
-                # ['relu', 'tanh', 'sig', 'smin', 'smax', 'gelu', 'lrelu']
-]
 
-models = {}
-params = []
-# for p in levels_of_dropout:
-for nt in neuron_types:
-    models['{}'.format(nt)] = NeuralNet(input_size, hidden_size, num_classes,
-                                       neuron_types=nt, p=levels_of_dropout[0]).to(device)
-    params.append({'params': models['{}'.format(nt)].parameters()})
+if __name__ == '__main__':
 
-lossFunction = nn.NLLLoss()
-optimize_all = optim.SGD(params,
-                         lr=lr, momentum=momentum)
+    # levels_of_dropout = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95]
+    levels_of_dropout = [0.5]
+    neuron_types = [  # ['relu'],
+        # ['tanh'],
+        ['sig'],
+        # ['smin'],
+        # ['smax'],
+        # ['smin', 'smax'],
+        # ['gelu'],
+        # ['lrelu'],
+        # ['relu', 'tanh', 'sig'],
+        # ['relu', 'gelu', 'lrelu'],
+        # ['relu', 'tanh', 'sig', 'gelu', 'lrelu'],
+        # ['relu', 'tanh', 'sig', 'smin', 'smax', 'gelu', 'lrelu']
+    ]
 
-training_losses = []
-testing_accuracies = []
+    models = {}
+    params = []
+    # for p in levels_of_dropout:
+    for nt in neuron_types:
+        models['{}'.format(nt)] = NeuralNet(input_size, hidden_size, num_classes,
+                                            neuron_types=nt, p=levels_of_dropout[0]).to(device)
+        params.append({'params': models['{}'.format(nt)].parameters()})
 
-for epoch in range(num_epochs):
-    check_memory("start")
-    loss_ = [0 for i in range(len(neuron_types))]
-    for images, labels in train_loader:
-        # Flatten the input images of [28,28] to [1,784]
-        images = images.reshape(-1, 784).to(torch.device(device))
+    lossFunction = nn.NLLLoss()
+    optimize_all = optim.SGD(params,
+                             lr=lr, momentum=momentum)
 
-        output = []
-        for p in models:
-            output.append(models[p](images))
+    training_losses = []
+    testing_accuracies = []
 
-        loss = []
-        for out in output:
-            loss.append(lossFunction(out, labels))
-
-        optimize_all.zero_grad()
-
-        for l in loss:
-            l.backward()
-
-        optimize_all.step()
-
-        for i in range(len(neuron_types)):
-            loss_[i] += loss[i]
-
-    for i in range(len(neuron_types)):
-        print("Epoch{}, Training loss:{} types:{}".format(epoch,
-                                                             loss_[i] / len(train_loader),
-                                                             neuron_types[i]))
-    training_losses.append(loss_)
-
-    # Testing
-    with torch.no_grad():
-        correct = [0 for i in range(len(neuron_types))]
-        total = 0
-        for images, labels in test_loader:
+    for epoch in range(num_epochs):
+        check_memory("start")
+        loss_ = [0 for i in range(len(neuron_types))]
+        for images, labels in train_loader:
+            # Flatten the input images of [28,28] to [1,784]
             images = images.reshape(-1, 784).to(torch.device(device))
-            out = []
+
+            output = []
             for p in models:
-                out.append(models[p](images))
-            predicted = []
-            for o in out:
-                _, pred = torch.max(o, 1)
-                predicted.append(pred)
+                output.append(models[p](images))
+
+            loss = []
+            for out in output:
+                loss.append(lossFunction(out, labels))
+
+            optimize_all.zero_grad()
+
+            for l in loss:
+                l.backward()
+
+            optimize_all.step()
+
             for i in range(len(neuron_types)):
-                correct[i] += (predicted[i] == labels).sum().item()
-            total += labels.size(0)
+                loss_[i] += loss[i]
+
         for i in range(len(neuron_types)):
-            print('Testing accuracy: {} %  {}'.format(100 * correct[i] / total, neuron_types[i]))
-        testing_accuracies.append(100 * np.array(correct) / total)
+            print("Epoch{}, Training loss:{} types:{}".format(epoch,
+                                                              loss_[i] / len(train_loader),
+                                                              neuron_types[i]))
+        training_losses.append(loss_)
 
-print("training:")
-for i, p, in enumerate(models):
-    print(p, np.array(training_losses).astype(float)[:, i])
-# print(training_losses)
-print("testing")
-for i, p, in enumerate(models):
-    print("\n", p, "\n", np.array(testing_accuracies).astype(float)[:, i])
+        # Testing
+        with torch.no_grad():
+            correct = [0 for i in range(len(neuron_types))]
+            total = 0
+            for images, labels in test_loader:
+                images = images.reshape(-1, 784).to(torch.device(device))
+                out = []
+                for p in models:
+                    out.append(models[p](images))
+                predicted = []
+                for o in out:
+                    _, pred = torch.max(o, 1)
+                    predicted.append(pred)
+                for i in range(len(neuron_types)):
+                    correct[i] += (predicted[i] == labels).sum().item()
+                total += labels.size(0)
+            for i in range(len(neuron_types)):
+                print('Testing accuracy: {} %  {}'.format(100 * correct[i] / total, neuron_types[i]))
+            testing_accuracies.append(100 * np.array(correct) / total)
 
+    print("training:")
+    for i, p, in enumerate(models):
+        print(p, np.array(training_losses).astype(float)[:, i])
+    # print(training_losses)
+    print("testing")
+    for i, p, in enumerate(models):
+        print("\n", p, "\n", np.array(testing_accuracies).astype(float)[:, i])
 
-test_label = "hidden_size{} test_acc{}".format(hidden_size, testing_accuracies[-1])
-for m in models:
-    torch.save(models[m], 'mnist sigmoid {}.pt'.format(test_label))
+    test_label = "hidden_size{} test_acc{}".format(hidden_size, testing_accuracies[-1])
+    for m in models:
+        torch.save(models[m], 'mnist sigmoid {}.pt'.format(test_label))
 
-print('done')
+    print('done')

@@ -17,27 +17,27 @@ sns.set_theme(style="whitegrid")
 
 
 def sigmoid(position, w, b):
-    return 1 / (1 + np.exp(-np.sum(w * position) + b))
+    return 1 / (1 + np.exp(-np.sum(w * position) - b))
 
 
 def vex_sigmoid(position, w, b):
-    c = np.square(w) * 0.05
+    c = np.square(w) * 0.5
     return sigmoid(position, w, b) + np.sum(c * np.square(position))
 
 
 def vex_der(position, w, b):
-    c = np.square(w) * 0.05
+    c = np.square(w) * 0.5
     sig = sigmoid(position, w, b)
     return w * sig * (1 - sig) + (2 * c * position)
 
 
 def cave_sigmoid(position, w, b):
-    c = np.square(w) * 0.05
+    c = np.square(w) * 0.5
     return sigmoid(position, w, b) - np.sum(c * np.square(position))
 
 
 def cave_der(position, w, b):
-    c = np.square(w) * 0.05
+    c = np.square(w) * 0.5
     sig = sigmoid(position, w, b)
     return w * sig * (1 - sig) - (2 * c * position)
 
@@ -60,10 +60,9 @@ def piecewise_value(position, legendre_m, legendre_c, vex=True, soft=False):
             return np.min(y)
 
 
-# g = [
-#     [0, 1],
-#     [1, 0.9]
-# ]
+g = [
+    np.array([np.array([2.9534, 2.6969]), -0.1383])
+]
 
 np.random.seed(272727)
 
@@ -71,13 +70,13 @@ dimensions = 2
 bias = 100
 weighting = 40
 n_sig = 5
-g = [[np.array([np.random.random() * weighting - (weighting / 2) for j in range(dimensions)]),
-      np.random.random() * bias - (bias / 2)]
-     for i in range(n_sig)]
+# g = [[np.array([np.random.random() * weighting - (weighting / 2) for j in range(dimensions)]),
+#       np.random.random() * bias - (bias / 2)]
+#      for i in range(n_sig)]
 
-v_min = -8
-v_max = 8
-increments = 20
+v_min = -1
+v_max = 1
+increments = 5
 
 full_vex_legendre_m = []
 full_cave_legendre_m = []

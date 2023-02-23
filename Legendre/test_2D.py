@@ -31,15 +31,15 @@ print("generating data")
 # train_loader = generate_corner_2class_data(batches=5, batch_size=batch_size)
 # test_loader = generate_corner_2class_data(batches=3, batch_size=batch_size)
 batch_size = 64
-train_loader = generate_corner_2class_data(batches=40, batch_size=batch_size)
-test_loader = generate_corner_2class_data(batches=10, batch_size=batch_size)
-# train_loader = generate_xor_data(batches=40, batch_size=batch_size)
-# test_loader = generate_xor_data(batches=10, batch_size=batch_size)
+# train_loader = generate_corner_2class_data(batches=40, batch_size=batch_size)
+# test_loader = generate_corner_2class_data(batches=10, batch_size=batch_size)
+train_loader = generate_xor_data(batches=40, batch_size=batch_size)
+test_loader = generate_xor_data(batches=10, batch_size=batch_size)
 
 print("loading net")
 # net_file = 'corner sigmoid nosoftorbias hidden_size[1] test_acc[78.90625].pt'
-net_file = 'corner sigmoid nosoftorbias hidden_size[3] test_acc[98.90625].pt'
-# net_file = 'xor sigmoid nosoftorbias hidden_size[8] test_acc[99.53125].pt'
+# net_file = 'corner sigmoid nosoftorbias hidden_size[3] test_acc[98.90625].pt'
+net_file = 'xor sigmoid nosoftorbias hidden_size[8] test_acc[99.53125].pt'
 model = torch.load(net_file)
 
 def Sig(x, w, b, out_w):
@@ -166,27 +166,32 @@ for images, labels in tqdm(train_loader):
         net_values[i].append(Sig(images, w, b, out_w))
         vex_values[i].append(CaVexSig(images, w, b, out_w, True))
         cave_values[i].append(CaVexSig(images, w, b, out_w, False))
-        if not i:
-            net_total.append(net_values[i][-1])
-            full_vex_legendre_m.append(CaVexDer(images, w, b, out_w, True))
-            vex_total.append(vex_values[i][-1])
-            full_cave_legendre_m.append(CaVexDer(images, w, b, out_w, False))
-            cave_total.append(cave_values[i][-1])
-        else:
-            net_total[-1] += net_values[i][-1]
-            full_vex_legendre_m[-1] += CaVexDer(images, w, b, out_w, True)
-            vex_total[-1] += vex_values[i][-1]
-            full_cave_legendre_m[-1] += CaVexDer(images, w, b, out_w, False)
-            cave_total[-1] += cave_values[i][-1]
+        neuron_vex_total = vex_values[i][-1]
+        neuron_cave_total = cave_values[i][-1]
+        neuron_vex_legendre_m = CaVexDer(images, w, b, out_w, True)
+        neuron_cave_legendre_m = CaVexDer(images, w, b, out_w, False)
 
         for output, ow in enumerate(out_w):
             if ow < 0:
-                temp = torch.tensor(full_vex_legendre_m[-1][:, :, output])
-                full_vex_legendre_m[-1][:, :, output] = full_cave_legendre_m[-1][:, :, output]
-                full_cave_legendre_m[-1][:, :, output] = temp
-                temp = torch.tensor(cave_total[-1][:, output])
-                cave_total[-1][:, output] = vex_total[-1][:, output]
-                vex_total[-1][:, output] = temp
+                temp = torch.tensor(neuron_vex_legendre_m[:, :, output])
+                neuron_vex_legendre_m[:, :, output] = neuron_cave_legendre_m[:, :, output]
+                neuron_cave_legendre_m[:, :, output] = temp
+                temp = torch.tensor(neuron_cave_total[:, output])
+                neuron_cave_total[:, output] = neuron_vex_total[:, output]
+                neuron_vex_total[:, output] = temp
+
+        if not i:
+            net_total.append(net_values[i][-1])
+            full_vex_legendre_m.append(neuron_vex_legendre_m)
+            vex_total.append(neuron_vex_total)
+            full_cave_legendre_m.append(neuron_cave_legendre_m)
+            cave_total.append(neuron_cave_total)
+        else:
+            net_total[-1] += net_values[i][-1]
+            full_vex_legendre_m[-1] += neuron_vex_legendre_m
+            vex_total[-1] += neuron_vex_total
+            full_cave_legendre_m[-1] += neuron_cave_legendre_m
+            cave_total[-1] += neuron_cave_total
 
     real_net = model(images)
 
