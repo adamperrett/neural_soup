@@ -164,7 +164,7 @@ if __name__ == '__main__':
         loss_ = [0 for i in range(len(neuron_types))]
         for images, labels in train_loader:
             # Flatten the input images of [28,28] to [1,784]
-            images = images.reshape(-1, 784).to(torch.device(device))
+            images = images.reshape(-1, 784).to(torch.device(device)) - 0.5
 
             output = []
             for p in models:
@@ -195,7 +195,7 @@ if __name__ == '__main__':
             correct = [0 for i in range(len(neuron_types))]
             total = 0
             for images, labels in test_loader:
-                images = images.reshape(-1, 784).to(torch.device(device))
+                images = images.reshape(-1, 784).to(torch.device(device)) - 0.5
                 out = []
                 for p in models:
                     out.append(models[p](images))
@@ -220,6 +220,6 @@ if __name__ == '__main__':
 
     test_label = "hidden_size{} test_acc{}".format(hidden_size, testing_accuracies[-1])
     for m in models:
-        torch.save(models[m], 'mnist sigmoid {}.pt'.format(test_label))
+        torch.save(models[m], 'mnist0.5 sigmoid {}.pt'.format(test_label))
 
     print('done')

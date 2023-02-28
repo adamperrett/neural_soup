@@ -83,7 +83,7 @@ class NeuralNet(nn.Module):
         self.LogSoftmax = nn.LogSoftmax(dim=1)
 
     def mixed_act(self, x, layer):
-        combined = torch.zeros([len(x), len(self.splits[layer])])
+        combined = torch.zeros([len(x), len(self.splits[layer])]).type(torch.float32)
         for n_type in self.neuron_types:
             combined[:, self.act_idxs[layer][n_type]] = self.functions[n_type](x[:, self.act_idxs[layer][n_type]])
         return combined
