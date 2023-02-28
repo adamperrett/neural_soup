@@ -180,11 +180,20 @@ soft_levels = [3, 2, 1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1]
 
 generations = 100
 population_size = 100
-genome_length = 200
+genome_length = 1000  # 1100 <= 200 sigmoid neuron network in terms of CPU/GPU time usage
 batch_n = 100
 tournament_size = 4
 mutation_rate = 0.03
 elitism = 0.1
+
+test_label = 'g{} p{}x{} t{} m{} e{}'.format(
+    generations,
+    population_size,
+    genome_length,
+    tournament_size,
+    mutation_rate,
+    elitism
+)
 
 population = torch.stack([torch.tensor(np.random.choice(range(60000), genome_length, replace=False)) for i in range(population_size)])
 
@@ -256,5 +265,22 @@ with torch.no_grad():
 
         population = iterate_population(population, 100 * np.array(correct_l) / total)
 
+        plt.figure()
+        x = [i for i in range(len(generation_metrics))]
+        g_max = [m for m, _, _ in generation_metrics]
+        plt.plot(x, g_max, label='max')
+        g_min = [m for _, m, _ in generation_metrics]
+        plt.plot(x, g_min, label='min')
+        g_ave = [m for _, _, m in generation_metrics]
+        plt.plot(x, g_ave, label='mean')
+        plt.title("Testing accuracy of GA {}".format(test_label))
+        plt.xlabel("Testing accuracy")
+        plt.ylabel("Generations")
+        plt.legend(loc='lower right')
+        figure = plt.gcf()
+        figure.set_size_inches(16, 9)
+        plt.tight_layout(rect=[0, 0.3, 1, 0.95])
+        plt.savefig("./plots/{}.png".format(test_label), bbox_inches='tight', dpi=200, format='png')
+        plt.close()
 
 print("Done")
