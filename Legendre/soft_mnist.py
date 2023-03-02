@@ -187,19 +187,6 @@ with torch.no_grad():
     for images, labels in tqdm(train_loader):
         images = images.reshape(-1, 784).to(torch.device(device)) - 0.5
 
-        # # Enable profiling
-        # with torch.profiler.profile(profile_memory=True, record_shapes=True) as prof:
-        #     # Run the model with the dummy input
-        #     output = model(input_tensor)
-        #
-        # # Print the CPU profiling results
-        # print(prof.key_averages().table(sort_by="self_cpu_time_total", row_limit=10))
-        #
-        # # Print the GPU profiling results
-        # print(prof.key_averages(group_by_input_shape=True))
-        # # Print the profiling results
-        # print(prof.key_averages().table(sort_by="self_cuda_time_total", row_limit=10))
-
         out_m = model(images)
         _, pred = torch.max(out_m, 1)
         correct_m += (pred == labels).sum().item()

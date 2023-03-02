@@ -91,7 +91,7 @@ def piecewise_value(x, sig_m, sig_c, cavex_m, cavex_c, population, soft=False):
             max_vex_max = torch.max(cavexy[agent.cpu().numpy()], dim=0)[1]
             # min_cave_min = torch.min(-cavexy, dim=0)[1]
             vex_sy = torch.stack([torch.stack(
-                [sy[output_i][j][i] for i, output_i in enumerate(idx)]) for j, idx in enumerate(max_vex_max)])
+                [sy[output_i][j][i] for i, output_i in enumerate(idx)]) for j, idx in enumerate(agent[max_vex_max])])
             # cave_sy = torch.stack([torch.stack(
             #     [sy[output_i][j][i] for i, output_i in enumerate(idx)]) for j, idx in enumerate(min_cave_min)])
             # y = (vex_sy + cave_sy) / 2
@@ -109,10 +109,17 @@ def iterate_population(population, fitnesses):
         winner = torch.max(fitnesses[tournament], dim=0)[1]
         mutate_indexes = np.array([(np.random.random() < mutation_rate) for i in range(genome_length)])
         child = population[tournament[winner]]
-        for gene in np.where(mutate_indexes == 1):
-            child[gene] = np.random.choice(60000)
+        new_genes = []
+        for gene in np.where(mutate_indexes == 1)[0]:
+            new_gene = np.random.choice(60000)
+            while new_gene in child or new_gene in new_genes:
+                new_gene = np.random.choice(60000)
+            new_genes.append(new_gene)
+        for gene, new_gene in zip(np.where(mutate_indexes == 1)[0], new_genes):
+            child[gene] = new_gene
         children.append(child)
     new_population = torch.vstack([elite, torch.stack(children)])
+    # [torch.bincount(population.data[i])[torch.bincount(population.data[i]).nonzero()] for i in range(len(population))]
     return new_population
 
 # full_sig = []

@@ -148,17 +148,18 @@ if __name__ == '__main__':
     input_size = 2
     num_classes = 2
     batch_size = 64
-    num_epochs = 500
+    num_epochs = 100
     lr = 0.008
     momentum = 0.9
 
-    hidden_size = [3]
+    hidden_size = [8]
 
     # levels_of_dropout = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95]
     levels_of_dropout = [0.5]
-    neuron_types = [  # ['relu'],
+    neuron_types = [
+        ['relu'],
         # ['tanh'],
-        ['sig'],
+        # ['sig'],
         # ['smin'],
         # ['smax'],
         # ['smin', 'smax'],
@@ -178,10 +179,10 @@ if __name__ == '__main__':
     optimize_all = optim.SGD(params,
                              lr=lr, momentum=momentum)
 
-    train_loader = generate_corner_2class_data(batches=40, batch_size=batch_size)
-    test_loader = generate_corner_2class_data(batches=10, batch_size=batch_size)
-    # train_loader = generate_xor_data(batches=40, batch_size=batch_size)
-    # test_loader = generate_xor_data(batches=10, batch_size=batch_size)
+    # train_loader = generate_corner_2class_data(batches=40, batch_size=batch_size)
+    # test_loader = generate_corner_2class_data(batches=10, batch_size=batch_size)
+    train_loader = generate_xor_data(batches=40, batch_size=batch_size)
+    test_loader = generate_xor_data(batches=10, batch_size=batch_size)
 
     training_losses = []
     testing_accuracies = []
@@ -243,7 +244,8 @@ if __name__ == '__main__':
 
     test_label = "hidden_size{} test_acc{}".format(hidden_size, testing_accuracies[-1])
     for m in models:
+        torch.save(models[m], 'data/xor relu nosoftorbias {}.pt'.format(test_label))
         # torch.save(models[m], 'xor sigmoid nosoftorbias {}.pt'.format(test_label))
-        torch.save(models[m], 'corner sigmoid nosoftorbias {}.pt'.format(test_label))
+        # torch.save(models[m], 'corner sigmoid nosoftorbias {}.pt'.format(test_label))
 
     print('done')

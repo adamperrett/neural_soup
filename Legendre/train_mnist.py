@@ -18,7 +18,7 @@ else:
 
 
 class MyDropout(nn.Module):
-    def __init__(self, p: float = 0.5):
+    def __init__(self, p=0.5):
         super(MyDropout, self).__init__()
         if p < 0 or p > 1:
             raise ValueError("dropout probability has to be between 0 and 1, " "but got {}".format(p))

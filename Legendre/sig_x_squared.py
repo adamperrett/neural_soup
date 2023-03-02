@@ -88,8 +88,11 @@ def Sig(x, w, b, out_w):
 
 def CaVexSig(x, w, out_w):
     # c = torch.square(w) * 0.5 * out_w
-    c = torch.matmul(torch.square(w).unsqueeze(1) * 0.05, out_w.unsqueeze(0))
-    out = torch.matmul(torch.square(x), c)
+    # c = torch.matmul(torch.square(w).unsqueeze(1) * 0.95, out_w.unsqueeze(0))
+    c = (torch.matmul(w.unsqueeze(0), w.unsqueeze(1)) * out_w) * 0.05
+    # out = torch.matmul(torch.square(x), c)
+    x_squared = torch.matmul(torch.transpose(x.unsqueeze(2), 1, 2), x.unsqueeze(2)).squeeze()
+    out = x_squared.unsqueeze(1) * c
     return out
 
 
@@ -101,7 +104,8 @@ def Der(x, w, b, out_w, der_type):
         sig_derivative = (sig * (1 - sig))
         out = torch.stack([w_scale * der for der in sig_derivative])
     else:
-        c = torch.matmul(torch.square(w).unsqueeze(1) * 0.05, out_w.unsqueeze(0))
+        # c = torch.matmul(torch.square(w).unsqueeze(1) * 0.95, out_w.unsqueeze(0))
+        c = (torch.matmul(w.unsqueeze(0), w.unsqueeze(1)) * out_w) * 0.05
         input_const = (2 * torch.stack([position.unsqueeze(1) * c for position in x]))
         out = input_const
     # full_out = torch.matmul(out.unsqueeze(2), out_w.unsqueeze(0))
@@ -138,6 +142,7 @@ def piecewise_value(x, sig_m, sig_c, cavex_m, cavex_c, soft=False):
     cave_sy = torch.stack([torch.stack(
         [sy[output_i][j][i] for i, output_i in enumerate(idx)]) for j, idx in enumerate(min_cave_min3)])
     y = (vex_sy + cave_sy) / 2
+    true_y = (y_min + y_max) / 2
     return y
     # if soft:
     #     temperature = .01
