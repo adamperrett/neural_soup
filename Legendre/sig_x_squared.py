@@ -34,15 +34,15 @@ print("generating data")
 # train_loader = generate_corner_2class_data(batches=5, batch_size=batch_size)
 # test_loader = generate_corner_2class_data(batches=3, batch_size=batch_size)
 batch_size = 64
-train_loader = generate_corner_2class_data(batches=40, batch_size=batch_size)
-test_loader = generate_corner_2class_data(batches=10, batch_size=batch_size)
-# train_loader = generate_xor_data(batches=40, batch_size=batch_size)
-# test_loader = generate_xor_data(batches=10, batch_size=batch_size)
+# train_loader = generate_corner_2class_data(batches=40, batch_size=batch_size)
+# test_loader = generate_corner_2class_data(batches=10, batch_size=batch_size)
+train_loader = generate_xor_data(batches=40, batch_size=batch_size)
+test_loader = generate_xor_data(batches=10, batch_size=batch_size)
 
 print("loading net")
-net_file = 'corner sigmoid nosoftorbias hidden_size[1] test_acc[78.90625]'
+# net_file = 'corner sigmoid nosoftorbias hidden_size[1] test_acc[78.90625]'
 # net_file = 'corner sigmoid nosoftorbias hidden_size[3] test_acc[98.90625]'
-# net_file = 'xor sigmoid nosoftorbias hidden_size[8] test_acc[99.53125]'
+net_file = 'xor sigmoid nosoftorbias hidden_size[8] test_acc[99.53125]'
 model = torch.load('data/'+net_file+'.pt')
 
 def Sig(x, w, b, out_w):
@@ -86,17 +86,18 @@ def Sig(x, w, b, out_w):
 #     # full_out = torch.matmul(out.unsqueeze(2), out_w.unsqueeze(0))
 #     return out
 
-def CaVexSig(x, w, out_w):
-    # c = torch.square(w) * 0.5 * out_w
-    # c = torch.matmul(torch.square(w).unsqueeze(1) * 0.95, out_w.unsqueeze(0))
-    c = (torch.matmul(w.unsqueeze(0), w.unsqueeze(1)) * out_w) * 0.05
-    # out = torch.matmul(torch.square(x), c)
-    x_squared = torch.matmul(torch.transpose(x.unsqueeze(2), 1, 2), x.unsqueeze(2)).squeeze()
-    out = x_squared.unsqueeze(1) * c
+def CaVexSig(x, w, out_w, old=False):
+    if old:
+        c = torch.matmul(torch.square(w).unsqueeze(1) * 0.05, out_w.unsqueeze(0))
+        out = torch.matmul(torch.square(x), c)
+    else:
+        c = (torch.matmul(w.unsqueeze(0), w.unsqueeze(1)) * out_w) * 0.05
+        x_squared = torch.matmul(torch.transpose(x.unsqueeze(2), 1, 2), x.unsqueeze(2)).squeeze()
+        out = x_squared.unsqueeze(1) * c
     return out
 
 
-def Der(x, w, b, out_w, der_type):
+def Der(x, w, b, out_w, der_type, old=False):
     # c = torch.square(w) * 0.5 * out_w
     if der_type == 'sig':
         sig = 1 / (1 + torch.exp(-torch.sum(x * w, dim=1) - b))
@@ -104,14 +105,16 @@ def Der(x, w, b, out_w, der_type):
         sig_derivative = (sig * (1 - sig))
         out = torch.stack([w_scale * der for der in sig_derivative])
     else:
-        # c = torch.matmul(torch.square(w).unsqueeze(1) * 0.95, out_w.unsqueeze(0))
-        c = (torch.matmul(w.unsqueeze(0), w.unsqueeze(1)) * out_w) * 0.05
+        if old:
+            c = torch.matmul(torch.square(w).unsqueeze(1) * 0.05, out_w.unsqueeze(0))
+        else:
+            c = (torch.matmul(w.unsqueeze(0), w.unsqueeze(1)) * out_w) * 0.05
         input_const = (2 * torch.stack([position.unsqueeze(1) * c for position in x]))
         out = input_const
     # full_out = torch.matmul(out.unsqueeze(2), out_w.unsqueeze(0))
     return out
 
-def piecewise_value(x, sig_m, sig_c, cavex_m, cavex_c, soft=False):
+def piecewise_value(x, sig_m, sig_c, cavex_m, cavex_c, old=False):
     sy = []
     vexy = []
     cavey = []
@@ -141,8 +144,10 @@ def piecewise_value(x, sig_m, sig_c, cavex_m, cavex_c, soft=False):
         [sy[output_i][j][i] for i, output_i in enumerate(idx)]) for j, idx in enumerate(max_vex_max3)])
     cave_sy = torch.stack([torch.stack(
         [sy[output_i][j][i] for i, output_i in enumerate(idx)]) for j, idx in enumerate(min_cave_min3)])
-    y = (vex_sy + cave_sy) / 2
-    true_y = (y_min + y_max) / 2
+    if old:
+        y = (vex_sy + cave_sy) / 2
+    else:
+        y = (y_min + y_max) / 2
     return y
     # if soft:
     #     temperature = .01
@@ -158,10 +163,13 @@ def piecewise_value(x, sig_m, sig_c, cavex_m, cavex_c, soft=False):
 
 full_sig = []
 full_cavex = []
+old_full_cavex = []
 full_sig_der = []
 full_cavex_der = []
+old_full_cavex_der = []
 full_sig_c = []
 full_cavex_c = []
+old_full_cavex_c = []
 
 legendre_scale_factor = 1#0e3
 
@@ -169,7 +177,7 @@ hidden_size = model.layer[0].bias.shape[0]
 
 
 print("extracting Legendre transform")
-resolution = 3#5*8
+resolution = 5*8
 # spanning_data = torch.stack([
 #     torch.stack([torch.tensor([x, y]) for x in np.linspace(-1, 1, resolution)])
 #     for y in np.linspace(-1, 1, resolution)]
@@ -181,9 +189,9 @@ spanning_data = torch.stack([
 a_i = [i for i in range(resolution**2)]
 batch_indexes = [a_i[j*batch_size:(j+1)*batch_size] for j in range(int(np.ceil(resolution**2/batch_size)))]
 # out_b = model.layer[1].bias.data
-# for images, labels in tqdm(train_loader):
-for b_i in batch_indexes:
-    images = spanning_data[batch_indexes]
+for images, labels in tqdm(train_loader):
+# for b_i in batch_indexes:
+#     images = spanning_data[batch_indexes]
     for i, (w, b, out_w) in enumerate(zip(model.layer[0].weight.data,
                                    model.layer[0].bias.data,
                                    torch.transpose(model.layer[1].weight.data, 0, 1)
@@ -198,8 +206,10 @@ for b_i in batch_indexes:
         # cave_values[i].append(CaVexSig(images, w, b, out_w, False))
         neuron_sig = Sig(images, w, b, out_w)
         neuron_cavex = CaVexSig(images, w, out_w)
+        old_neuron_cavex = CaVexSig(images, w, out_w, old=True)
         neuron_sig_der = Der(images, w, b, out_w, 'sig')
         neuron_cavex_der = Der(images, w, b, out_w, False)
+        old_neuron_cavex_der = Der(images, w, b, out_w, False, old=True)
 
         for output, ow in enumerate(out_w):
             if ow < 0:
@@ -207,29 +217,39 @@ for b_i in batch_indexes:
                 # neuron_sig_der[output] *= -1
                 neuron_cavex[:, output] *= -1
                 neuron_cavex_der[:, :, output] *= -1
+                old_neuron_cavex[:, output] *= -1
+                old_neuron_cavex_der[:, :, output] *= -1
 
         if not i:
             full_sig.append(neuron_sig)
             full_cavex.append(neuron_cavex)
+            old_full_cavex.append(old_neuron_cavex)
             full_sig_der.append(neuron_sig_der)
             full_cavex_der.append(neuron_cavex_der)
+            old_full_cavex_der.append(old_neuron_cavex_der)
         else:
             full_sig[-1] += neuron_sig
             full_cavex[-1] += neuron_cavex
+            old_full_cavex[-1] += old_neuron_cavex
             full_sig_der[-1] += neuron_sig_der
             full_cavex_der[-1] += neuron_cavex_der
+            old_full_cavex_der[-1] += old_neuron_cavex_der
 
     # real_net = model(images)
     full_sig_c.append(full_sig[-1] - torch.stack(
         [torch.matmul(im, f) for f, im in zip(full_sig_der[-1], images)]))
     full_cavex_c.append(full_cavex[-1] - torch.stack(
         [torch.matmul(im, f) for f, im in zip(full_cavex_der[-1], images)]))
+    old_full_cavex_c.append(old_full_cavex[-1] - torch.stack(
+        [torch.matmul(im, f) for f, im in zip(old_full_cavex_der[-1], images)]))
     print('', end='')
 
 full_sig_c = torch.vstack(full_sig_c)
 full_cavex_c = torch.vstack(full_cavex_c)
+old_full_cavex_c = torch.vstack(old_full_cavex_c)
 full_sig_der = torch.vstack(full_sig_der)
 full_cavex_der = torch.vstack(full_cavex_der)
+old_full_cavex_der = torch.vstack(old_full_cavex_der)
 
 print('', end='')
 
@@ -242,25 +262,30 @@ print('', end='')
 # full_cave_legendre_m = torch.load('cave_m.pt')
 # full_cave_legendre_c = torch.load('cave_c.pt')
 
-# with torch.no_grad():
-#     correct_m = 0
-#     correct_l = 0
-#     total = 0
-#     for images, labels in tqdm(test_loader):
-#         out_m = model(images.type(torch.float32))
-#         _, pred = torch.max(out_m, 1)
-#         correct_m += (pred == labels).sum().item()
-#
-#         out_l = piecewise_value(images, full_sig_der, full_sig_c, full_cavex_der, full_cavex_c)
-#
-#         _, pred = torch.max(out_l, 1)
-#         correct_l += (pred == labels).sum().item()
-#
-#         total += labels.size(0)
-#         print("Current total {}/{}".format(total+1, len(test_loader)))
-#         print('Model testing accuracy: {} %'.format(100 * correct_m / total))
-#         print('Legendre testing accuracy: {} %'.format(100 * correct_l / total))
-#     # testing_accuracies = 100 * np.array(correct) / total
+with torch.no_grad():
+    correct_m = 0
+    correct_l = 0
+    correct_old = 0
+    total = 0
+    for images, labels in tqdm(test_loader):
+        out_m = model(images.type(torch.float32))
+        _, pred = torch.max(out_m, 1)
+        correct_m += (pred == labels).sum().item()
+
+        out_l = piecewise_value(images, full_sig_der, full_sig_c, full_cavex_der, full_cavex_c)
+        _, pred = torch.max(out_l, 1)
+        correct_l += (pred == labels).sum().item()
+
+        old_out_l = piecewise_value(images, full_sig_der, full_sig_c, old_full_cavex_der, old_full_cavex_c, old=True)
+        _, pred = torch.max(old_out_l, 1)
+        correct_old += (pred == labels).sum().item()
+
+        total += labels.size(0)
+        print("Current total {}/{}".format(total+1, len(test_loader)))
+        print('Model testing accuracy: {} %'.format(100 * correct_m / total))
+        print('Legendre testing accuracy: {} %'.format(100 * correct_l / total))
+        print('Old Legendre testing accuracy: {} %'.format(100 * correct_old / total))
+    # testing_accuracies = 100 * np.array(correct) / total
 
 print("extracting positional values")
 # resolution = 3#5*8
@@ -278,16 +303,23 @@ print("extracting positional values")
 
 model_output = []
 legendre_output = []
+old_legendre_output = []
 with torch.no_grad():
     for b_i in tqdm(batch_indexes):
         batch = spanning_data[b_i]
         model_output.append(model(batch))
         out_l = piecewise_value(batch, full_sig_der, full_sig_c, full_cavex_der, full_cavex_c)
         legendre_output.append(out_l)
+        old_out_l = piecewise_value(batch, full_sig_der, full_sig_c, old_full_cavex_der, old_full_cavex_c, old=True)
+        old_legendre_output.append(old_out_l)
 
 model_output = torch.vstack(model_output).cpu().reshape(resolution, resolution, 2)
 legendre_output = torch.vstack(legendre_output).cpu().reshape(resolution, resolution, 2)
+old_legendre_output = torch.vstack(old_legendre_output).cpu().reshape(resolution, resolution, 2)
 spanning_data = spanning_data.cpu().reshape(resolution, resolution, 2)
+
+print("x^2", torch.sum(model_output - legendre_output))#, model_output - legendre_output)
+print("old", torch.sum(model_output - old_legendre_output))#, model_output - old_legendre_output)
 
 print("plotting")
 fig = plt.figure()
@@ -308,6 +340,9 @@ ax.plot_wireframe(spanning_data[:, :, 0], spanning_data[:, :, 1],
 ax.plot_wireframe(spanning_data[:, :, 0], spanning_data[:, :, 1],
                   legendre_output[:, :, 0] + legendre_output[:, :, 1],
                   color='green', alpha=1, label='Legendre output')
+ax.plot_wireframe(spanning_data[:, :, 0], spanning_data[:, :, 1],
+                  old_legendre_output[:, :, 0] + old_legendre_output[:, :, 1],
+                  color='red', alpha=1, label='Old Legendre output')
 ax.legend(loc='lower right')
 
 ax = fig.add_subplot(2, 3, 4, projection='3d')
