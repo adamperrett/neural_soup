@@ -162,86 +162,90 @@ legendre_scale_factor = 1#0e3
 hidden_size = model.layer[0].bias.shape[0]
 
 
-# print("extracting Legendre transform")
-#
-# for images, labels in tqdm(train_loader):
-#     images = images.reshape(-1, 784).to(torch.device(device)) - 0.5
-#     for i, (w, b, out_w) in enumerate(zip(model.layer[0].weight.data,
-#                                    model.layer[0].bias.data,
-#                                    torch.transpose(model.layer[1].weight.data, 0, 1)
-#                                    )):
-#
-#         w = w.type(default_type)
-#         b = b.type(default_type)
-#         out_w = out_w.type(default_type)
-#
-#         neuron_sig = Sig(images, w, b, out_w)
-#         neuron_cavex = CaVexSig(images, w, out_w)
-#         old_neuron_cavex = CaVexSig(images, w, out_w, old=True)
-#         neuron_sig_der = Der(images, w, b, out_w, 'sig')
-#         neuron_cavex_der = Der(images, w, b, out_w, False)
-#         old_neuron_cavex_der = Der(images, w, b, out_w, False, old=True)
-#
-#         for output, ow in enumerate(out_w):
-#             if ow < 0:
-#                 neuron_cavex[:, output] *= -1
-#                 neuron_cavex_der[:, :, output] *= -1
-#                 old_neuron_cavex[:, output] *= -1
-#                 old_neuron_cavex_der[:, :, output] *= -1
-#
-#         if not i:
-#             full_sig.append(neuron_sig)
-#             full_cavex.append(neuron_cavex)
-#             old_full_cavex.append(old_neuron_cavex)
-#             full_sig_der.append(neuron_sig_der)
-#             full_cavex_der.append(neuron_cavex_der)
-#             old_full_cavex_der.append(old_neuron_cavex_der)
-#         else:
-#             full_sig[-1] += neuron_sig
-#             full_cavex[-1] += neuron_cavex
-#             old_full_cavex[-1] += old_neuron_cavex
-#             full_sig_der[-1] += neuron_sig_der
-#             full_cavex_der[-1] += neuron_cavex_der
-#             old_full_cavex_der[-1] += old_neuron_cavex_der
-#
-#     full_sig_c.append(full_sig[-1] - torch.stack(
-#         [torch.matmul(im, f) for f, im in zip(full_sig_der[-1], images)]))
-#     full_cavex_c.append(full_cavex[-1] - torch.stack(
-#         [torch.matmul(im, f) for f, im in zip(full_cavex_der[-1], images)]))
-#     old_full_cavex_c.append(old_full_cavex[-1] - torch.stack(
-#         [torch.matmul(im, f) for f, im in zip(old_full_cavex_der[-1], images)]))
-#     print('', end='')
-#
-# full_sig_c = torch.vstack(full_sig_c)
-# full_cavex_c = torch.vstack(full_cavex_c)
-# old_full_cavex_c = torch.vstack(old_full_cavex_c)
-# full_sig_der = torch.vstack(full_sig_der)
-# full_cavex_der = torch.vstack(full_cavex_der)
-# old_full_cavex_der = torch.vstack(old_full_cavex_der)
-#
-# print('', end='')
+print("extracting Legendre transform")
+
+for images, labels in tqdm(train_loader):
+    images = images.reshape(-1, 784).to(torch.device(device)) - 0.5
+    for i, (w, b, out_w) in enumerate(zip(model.layer[0].weight.data,
+                                   model.layer[0].bias.data,
+                                   torch.transpose(model.layer[1].weight.data, 0, 1)
+                                   )):
+
+        w = w.type(default_type)
+        b = b.type(default_type)
+        out_w = out_w.type(default_type)
+
+        neuron_sig = Sig(images, w, b, out_w)
+        neuron_cavex = CaVexSig(images, w, out_w)
+        old_neuron_cavex = CaVexSig(images, w, out_w, old=True)
+        neuron_sig_der = Der(images, w, b, out_w, 'sig')
+        neuron_cavex_der = Der(images, w, b, out_w, False)
+        old_neuron_cavex_der = Der(images, w, b, out_w, False, old=True)
+
+        for output, ow in enumerate(out_w):
+            if ow < 0:
+                neuron_cavex[:, output] *= -1
+                neuron_cavex_der[:, :, output] *= -1
+                old_neuron_cavex[:, output] *= -1
+                old_neuron_cavex_der[:, :, output] *= -1
+
+        if not i:
+            full_sig.append(neuron_sig)
+            full_cavex.append(neuron_cavex)
+            old_full_cavex.append(old_neuron_cavex)
+            full_sig_der.append(neuron_sig_der)
+            full_cavex_der.append(neuron_cavex_der)
+            old_full_cavex_der.append(old_neuron_cavex_der)
+        else:
+            full_sig[-1] += neuron_sig
+            full_cavex[-1] += neuron_cavex
+            old_full_cavex[-1] += old_neuron_cavex
+            full_sig_der[-1] += neuron_sig_der
+            full_cavex_der[-1] += neuron_cavex_der
+            old_full_cavex_der[-1] += old_neuron_cavex_der
+
+    full_sig_c.append(full_sig[-1] - torch.stack(
+        [torch.matmul(im, f) for f, im in zip(full_sig_der[-1], images)]))
+    full_cavex_c.append(full_cavex[-1] - torch.stack(
+        [torch.matmul(im, f) for f, im in zip(full_cavex_der[-1], images)]))
+    old_full_cavex_c.append(old_full_cavex[-1] - torch.stack(
+        [torch.matmul(im, f) for f, im in zip(old_full_cavex_der[-1], images)]))
+    print('', end='')
+
+full_sig_c = torch.vstack(full_sig_c)
+full_cavex_c = torch.vstack(full_cavex_c)
+old_full_cavex_c = torch.vstack(old_full_cavex_c)
+full_sig_der = torch.vstack(full_sig_der)
+full_cavex_der = torch.vstack(full_cavex_der)
+old_full_cavex_der = torch.vstack(old_full_cavex_der)
+
+print('', end='')
 
 
-# torch.save(full_sig_c, 'data/sig_c {}.pt'.format(net_file))
-# torch.save(full_sig_der, 'data/sig_der {}.pt'.format(net_file))
-# torch.save(full_cavex_c, 'data/x2_cavex_c {}.pt'.format(net_file))
-# torch.save(full_cavex_der, 'data/x2_cavex_der {}.pt'.format(net_file))
-# torch.save(old_full_cavex_c, 'data/old_cavex_c {}.pt'.format(net_file))
-# torch.save(old_full_cavex_der, 'data/old_cavex_der {}.pt'.format(net_file))
-print("Loading data")
-full_sig_c = torch.load('data/sig_c {}.pt'.format(net_file))
-full_sig_der = torch.load('data/sig_der {}.pt'.format(net_file))
+torch.save(full_sig_c, 'data/sig_c {}.pt'.format(net_file))
+torch.save(full_sig_der, 'data/sig_der {}.pt'.format(net_file))
+torch.save(full_cavex_c, 'data/x2_cavex_c {}.pt'.format(net_file))
+torch.save(full_cavex_der, 'data/x2_cavex_der {}.pt'.format(net_file))
+torch.save(old_full_cavex_c, 'data/old_cavex_c {}.pt'.format(net_file))
+torch.save(old_full_cavex_der, 'data/old_cavex_der {}.pt'.format(net_file))
+# print("Loading data")
+# full_sig_c = torch.load('data/sig_c {}.pt'.format(net_file))
+# full_sig_der = torch.load('data/sig_der {}.pt'.format(net_file))
 # full_cavex_c = torch.load('data/x2_cavex_c {}.pt'.format(net_file))
 # full_cavex_der = torch.load('data/x2_cavex_der {}.pt'.format(net_file))
-old_full_cavex_c = torch.load('data/old_cavex_c {}.pt'.format(net_file))
-old_full_cavex_der = torch.load('data/old_cavex_der {}.pt'.format(net_file))
+# old_full_cavex_c = torch.load('data/old_cavex_c {}.pt'.format(net_file))
+# old_full_cavex_der = torch.load('data/old_cavex_der {}.pt'.format(net_file))
 
 with torch.no_grad():
     correct_m = 0
-    correct_l = 0
-    loss_l = 0
-    correct_old = 0
-    old_loss = 0
+    old_correct_xtx = 0
+    old_loss_xtx = 0
+    correct_xtx = 0
+    loss_xtx = 0
+    old_correct_x2 = 0
+    old_loss_x2 = 0
+    correct_x2 = 0
+    loss_x2 = 0
     total = 0
     for images, labels in tqdm(train_loader):
         images = images.reshape(-1, 784).to(torch.device(device)) - 0.5
@@ -250,22 +254,37 @@ with torch.no_grad():
         _, pred = torch.max(out_m, 1)
         correct_m += (pred == labels).sum().item()
 
-        # out_l = piecewise_value(images, full_sig_der, full_sig_c, full_cavex_der, full_cavex_c, old=True)
-        # _, pred = torch.max(out_l, 1)
-        # correct_l += (pred == labels).sum().item()
-        # loss_l += torch.sum(torch.abs(out_l - out_m))
-        old_out_l = piecewise_value(images, full_sig_der, full_sig_c, old_full_cavex_der, old_full_cavex_c, old=True)
-        _, pred = torch.max(old_out_l, 1)
-        correct_old += (pred == labels).sum().item()
-        old_loss += torch.sum(torch.abs(old_out_l - out_m))
+        out_old_xtx = piecewise_value(images, full_sig_der, full_sig_c, full_cavex_der, full_cavex_c, old=True)
+        _, pred = torch.max(out_old_xtx, 1)
+        old_correct_xtx += (pred == labels).sum().item()
+        old_loss_xtx += torch.sum(torch.abs(out_old_xtx - out_m))
+        
+        out_xtx = piecewise_value(images, full_sig_der, full_sig_c, full_cavex_der, full_cavex_c, old=False)
+        _, pred = torch.max(out_xtx, 1)
+        correct_xtx += (pred == labels).sum().item()
+        loss_xtx += torch.sum(torch.abs(out_xtx - out_m))
+        
+        out_old_x2 = piecewise_value(images, full_sig_der, full_sig_c, old_full_cavex_der, old_full_cavex_c, old=True)
+        _, pred = torch.max(out_old_x2, 1)
+        old_correct_x2 += (pred == labels).sum().item()
+        old_loss_x2 += torch.sum(torch.abs(out_old_x2 - out_m))
+        
+        out_x2 = piecewise_value(images, full_sig_der, full_sig_c, old_full_cavex_der, old_full_cavex_c, old=False)
+        _, pred = torch.max(out_x2, 1)
+        correct_x2 += (pred == labels).sum().item()
+        loss_x2 += torch.sum(torch.abs(out_x2 - out_m))
 
         total += labels.size(0)
         print("Current total {}".format(total))
         print('Model testing accuracy: {} %'.format(100 * correct_m / total))
-        # print('NewOld Legendre testing accuracy: {} %'.format(100 * correct_l / total))
-        # print('NewOld Average Legendre loss: {}'.format(loss_l / total))
-        print('Old Legendre testing accuracy: {} %'.format(100 * correct_old / total))
-        print('Average old Legendre loss: {}'.format(old_loss / total))
+        print('Old xTx Legendre testing accuracy: {} %'.format(100 * old_correct_xtx / total))
+        print('Old xTx Average Legendre loss: {}'.format(old_loss_xtx / total))
+        print('New xTx Legendre testing accuracy: {} %'.format(100 * correct_xtx / total))
+        print('New xTx Average Legendre loss: {}'.format(loss_xtx / total))
+        print('Old x^2 Legendre testing accuracy: {} %'.format(100 * old_correct_x2 / total))
+        print('Old x^2 Average Legendre loss: {}'.format(old_loss_x2 / total))
+        print('New x^2 Legendre testing accuracy: {} %'.format(100 * correct_x2 / total))
+        print('New x^2 Average Legendre loss: {}'.format(loss_x2 / total))
     # testing_accuracies = 100 * np.array(correct) / total
 
 
