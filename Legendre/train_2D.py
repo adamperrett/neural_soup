@@ -98,6 +98,36 @@ class NeuralNet(nn.Module):
         # out = self.LogSoftmax(out)
         return out
 
+    def output_0(self, x):
+        out = self.layer[0](x)
+        out = self.mixed_act(out, 0)
+        for i in range(1, len(self.layer) - 1):
+            out = self.layer[i](out)
+            out = self.mixed_act(out, i)
+        out = self.layer[-1](out)
+        # out = self.LogSoftmax(out)
+        return out[:, 0]
+
+    def output_1(self, x):
+        out = self.layer[0](x)
+        out = self.mixed_act(out, 0)
+        for i in range(1, len(self.layer) - 1):
+            out = self.layer[i](out)
+            out = self.mixed_act(out, i)
+        out = self.layer[-1](out)
+        # out = self.LogSoftmax(out)
+        return out[:, 1]
+
+    def separate_outputs(self, x, output):
+        out = self.layer[0](x)
+        out = self.mixed_act(out, 0)
+        for i in range(1, len(self.layer) - 1):
+            out = self.layer[i](out)
+            out = self.mixed_act(out, i)
+        out = self.layer[-1](out)
+        # out = self.LogSoftmax(out)
+        return out[:, output]
+
 
 def check_memory(where=''):
     print(where)
@@ -148,7 +178,7 @@ if __name__ == '__main__':
     input_size = 2
     num_classes = 2
     batch_size = 64
-    num_epochs = 100
+    num_epochs = 500
     lr = 0.008
     momentum = 0.9
 
@@ -157,9 +187,9 @@ if __name__ == '__main__':
     # levels_of_dropout = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95]
     levels_of_dropout = [0.5]
     neuron_types = [
-        ['relu'],
+        # ['relu'],
         # ['tanh'],
-        # ['sig'],
+        ['sig'],
         # ['smin'],
         # ['smax'],
         # ['smin', 'smax'],
@@ -244,8 +274,9 @@ if __name__ == '__main__':
 
     test_label = "hidden_size{} test_acc{}".format(hidden_size, testing_accuracies[-1])
     for m in models:
-        torch.save(models[m], 'data/xor relu nosoftorbias {}.pt'.format(test_label))
+        # torch.save(models[m], 'data/xor relu nosoftorbias {}.pt'.format(test_label))
         # torch.save(models[m], 'xor sigmoid nosoftorbias {}.pt'.format(test_label))
+        torch.save(models[m], 'data/xor sigmoid separate_out {}.pt'.format(test_label))
         # torch.save(models[m], 'corner sigmoid nosoftorbias {}.pt'.format(test_label))
 
     print('done')
