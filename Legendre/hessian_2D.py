@@ -43,97 +43,29 @@ print("loading net")
 # net_file = 'corner sigmoid nosoftorbias hidden_size[1] test_acc[78.90625]'
 # net_file = 'corner sigmoid nosoftorbias hidden_size[3] test_acc[98.90625]'
 # net_file = 'xor sigmoid nosoftorbias hidden_size[8] test_acc[99.53125]'
-net_file = 'xor sigmoid separate_out hidden_size[8] test_acc[99.53125]'
+# net_file = 'xor sigmoid separate_out hidden_size[8] test_acc[99.53125]'
+net_file = 'xor relu nosoftorbias hidden_size[8] test_acc[99.6875]'
 model = torch.load('data/'+net_file+'.pt')
 
-def Sig(x, w, b, out_w):
-    out = out_w.unsqueeze(1) / (1 + torch.exp(-torch.sum(x * w, dim=1) - b))
-    return torch.transpose(out, 0, 1)
-
-# def VexSig(x, w, b, out_w):
-#     # should c also be 2D?
-#     # is the sum over the right dimension
-#     # c = torch.square(w) * 0.5 * out_w
-#     # c = torch.matmul(torch.square(w) * 0.5, out_w)
-#     c = torch.matmul(torch.square(w).unsqueeze(1) * 0.5, out_w.unsqueeze(0))
-#     out = Sig(x, w, b, out_w) + torch.matmul(torch.square(x), c)
-#     return out
-#
-# def VexDer(x, w, b, out_w):
-#     # c = torch.square(w) * 0.5 * out_w
-#     c = torch.matmul(torch.square(w).unsqueeze(1) * 0.5, out_w.unsqueeze(0))
-#     sig = 1 / (1 + torch.exp(-torch.sum(x * w, dim=1) - b))
-#     w_scale = torch.matmul(w.unsqueeze(1), out_w.unsqueeze(0))
-#     input_const = (2 * torch.stack([position.unsqueeze(1) * torch.transpose(c, 0, 1) for position in x]))
-#     sig_derivative = (sig * (1 - sig))
-#     out = torch.stack([w_scale*der for der in sig_derivative]) + input_const
-#     # full_out = torch.matmul(out.unsqueeze(2), out_w.unsqueeze(0))
-#     return out
-#
-# def CaveSig(x, w, b, out_w):
-#     # c = torch.square(w) * 0.5 * out_w
-#     c = torch.matmul(torch.square(w).unsqueeze(1) * 0.5, out_w.unsqueeze(0))
-#     out = Sig(x, w, b, out_w) - torch.matmul(torch.square(x), c)
-#     return out
-#
-# def CaveDer(x, w, b, out_w):
-#     # c = torch.square(w) * 0.5 * out_w
-#     c = torch.matmul(torch.square(w).unsqueeze(1) * 0.5, out_w.unsqueeze(0))
-#     sig = 1 / (1 + torch.exp(-torch.sum(x * w, dim=1) - b))
-#     w_scale = torch.matmul(w.unsqueeze(1), out_w.unsqueeze(0))
-#     input_const = (2 * torch.stack([position.unsqueeze(1) * c for position in x]))
-#     sig_derivative = (sig * (1 - sig))
-#     out = torch.stack([w_scale * der for der in sig_derivative]) - input_const
-#     # full_out = torch.matmul(out.unsqueeze(2), out_w.unsqueeze(0))
-#     return out
-
-def CaVexSig(x, w, out_w, old=False):
-    if old:
-        c = torch.matmul(torch.square(w).unsqueeze(1) * 0.05, out_w.unsqueeze(0))
-        out = torch.matmul(torch.square(x), c)
-    else:
-        c = (torch.matmul(w.unsqueeze(0), w.unsqueeze(1)) * out_w) * 0.05
-        x_squared = torch.matmul(torch.transpose(x.unsqueeze(2), 1, 2), x.unsqueeze(2)).squeeze()
-        out = x_squared.unsqueeze(1) * c
-    return out
-
-
-def Der(x, w, b, out_w, der_type, old=False):
-    # c = torch.square(w) * 0.5 * out_w
-    if der_type == 'sig':
-        sig = 1 / (1 + torch.exp(-torch.sum(x * w, dim=1) - b))
-        w_scale = torch.matmul(w.unsqueeze(1), out_w.unsqueeze(0))
-        sig_derivative = (sig * (1 - sig))
-        out = torch.stack([w_scale * der for der in sig_derivative])
-    else:
-        if old:
-            c = torch.matmul(torch.square(w).unsqueeze(1) * 0.05, out_w.unsqueeze(0))
-        else:
-            c = (torch.matmul(w.unsqueeze(0), w.unsqueeze(1)) * out_w) * 0.05
-        input_const = (2 * torch.stack([position.unsqueeze(1) * c for position in x]))
-        out = input_const
-    # full_out = torch.matmul(out.unsqueeze(2), out_w.unsqueeze(0))
-    return out
+num_outputs = 2
 
 def calculate_c(model, all_x):
     net_hessian = torch.stack([torch.stack([
-        torch.autograd.functional.hessian(model.output_0, (all_x[i:i + 1])).squeeze(),
-        torch.autograd.functional.hessian(model.output_1, (all_x[i:i + 1])).squeeze()])
+        torch.autograd.functional.hessian(model.separate_outputs(out), (all_x[i:i + 1])).squeeze()
+        for out in range(num_outputs)])
         for i in range(all_x.shape[0])])
 
     eigen_values = torch.stack([torch.stack([
-        torch.linalg.eig(net_hessian[i][0])[0].real,
-        torch.linalg.eig(net_hessian[i][1])[0].real])
+        torch.linalg.eig(net_hessian[i][out])[0].real
+        for out in range(num_outputs)])
         for i in range(all_x.shape[0])])
 
-    margin_of_error = 0.0001
+    margin_of_error = 0.90001
     cavex_c = torch.stack([torch.stack([
         torch.max(
             -torch.min(torch.hstack([
-                eigen_values[i][0], torch.tensor(0)]))) + margin_of_error,
-        torch.max(
-            -torch.min(torch.hstack([
-                eigen_values[i][1], torch.tensor(0)]))) + margin_of_error])
+                eigen_values[i][out], torch.tensor(0)]))) + margin_of_error
+        for out in range(num_outputs)])
         for i in range(all_x.shape[0])])
 
     output_c = torch.max(cavex_c, dim=0)
@@ -221,20 +153,19 @@ with torch.no_grad():
         c_list.append(cavex_const)
     cavex_const = torch.max(torch.stack(c_list), dim=0)[0]
 
+print("calculating Legendre planes")
 for images, labels in tqdm(train_loader):
-# for b_i in batch_indexes:
+# for b_i in tqdm(batch_indexes):
 #     images = spanning_data[b_i]
-
     images.requires_grad = True
-    net_out_0 = model.output_0(images)
-    net_out_0.backward(torch.ones(images.shape[0]))
-    net_grad_0 = images.grad.clone().detach()
-    net_out_0.detach()
-    images.grad = None
-    net_out_1 = model.output_1(images)
-    net_out_1.backward(torch.ones(images.shape[0]))
-    net_grad_1 = images.grad.clone().detach()
-    net_out_1.detach()
+    n_out = []
+    n_m = []
+    for out in range(num_outputs):
+        n_out.append(model.separate_outputs(out)(images))
+        n_out[-1].backward(torch.ones(images.shape[0]))
+        n_m.append(images.grad.clone().detach())
+        images.grad = None
+        n_out[-1].detach()
     images.requires_grad = False
 
     with torch.no_grad():
@@ -242,11 +173,10 @@ for images, labels in tqdm(train_loader):
         cx2 = 0.5 * torch.stack([torch.sum(images * images, dim=1) * c for c in cavex_const])
         cx2_grad = torch.stack([images * c for c in cavex_const])
 
-        net_out.append(torch.stack([net_out_0, net_out_1]))
-        net_m.append(torch.stack([net_grad_0, net_grad_1]))
+        net_out.append(torch.stack(n_out))
+        net_m.append(torch.stack(n_m))
         net_c.append(torch.stack([
-            net_out_0 - torch.sum(net_grad_0 * images, dim=1),
-            net_out_1 - torch.sum(net_grad_1 * images, dim=1)
+            n_out[out] - torch.sum(n_m[out] * images, dim=1) for out in range(num_outputs)
         ]))
         cavex_out.append(cx2)
         cavex_m.append(cx2_grad)
@@ -300,9 +230,9 @@ with torch.no_grad():
         all_m.append(out_m)
         all_l.append(out_l)
         all_mindex.append(mindex_out_l)
-all_m = torch.stack(all_m)
-all_l = torch.stack(all_l)
-all_mindex = torch.stack(all_mindex)
+all_m = torch.vstack(all_m)
+all_l = torch.vstack(all_l)
+all_mindex = torch.vstack(all_mindex)
 print("Legendre difference", torch.sum(torch.abs(all_m - all_l)))
 print("Minmax Legendre difference", torch.sum(torch.abs(all_m - all_mindex)))
 
@@ -336,9 +266,9 @@ with torch.no_grad():
         all_m.append(out_m)
         all_l.append(out_l)
         all_mindex.append(mindex_out_l)
-all_m = torch.stack(all_m)
-all_l = torch.stack(all_l)
-all_mindex = torch.stack(all_mindex)
+all_m = torch.vstack(all_m)
+all_l = torch.vstack(all_l)
+all_mindex = torch.vstack(all_mindex)
 print("Legendre difference", torch.sum(torch.abs(all_m - all_l)))
 print("Minmax Legendre difference", torch.sum(torch.abs(all_m - all_mindex)))
 
@@ -397,7 +327,7 @@ ax.plot_wireframe(spanning_data[:, :, 0], spanning_data[:, :, 1],
                   color='green', alpha=1, label='Legendre output')
 ax.plot_wireframe(spanning_data[:, :, 0], spanning_data[:, :, 1],
                   mindex_legendre_output[:, :, 0] + mindex_legendre_output[:, :, 1],
-                  color='green', alpha=1, label='Mindex Legendre output')
+                  color='red', alpha=1, label='Mindex Legendre output')
 ax.legend(loc='lower right')
 
 ax = fig.add_subplot(2, 3, 4, projection='3d')

@@ -118,15 +118,17 @@ class NeuralNet(nn.Module):
         # out = self.LogSoftmax(out)
         return out[:, 1]
 
-    def separate_outputs(self, x, output):
-        out = self.layer[0](x)
-        out = self.mixed_act(out, 0)
-        for i in range(1, len(self.layer) - 1):
-            out = self.layer[i](out)
-            out = self.mixed_act(out, i)
-        out = self.layer[-1](out)
-        # out = self.LogSoftmax(out)
-        return out[:, output]
+    def separate_outputs(self, output):
+        def output_n(x):
+            out = self.layer[0](x)
+            out = self.mixed_act(out, 0)
+            for i in range(1, len(self.layer) - 1):
+                out = self.layer[i](out)
+                out = self.mixed_act(out, i)
+            out = self.layer[-1](out)
+            # out = self.LogSoftmax(out)
+            return out[:, output]
+        return output_n
 
 
 def check_memory(where=''):
