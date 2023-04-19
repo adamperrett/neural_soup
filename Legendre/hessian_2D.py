@@ -61,16 +61,34 @@ def calculate_c(model, all_x):
         for i in range(all_x.shape[0])])
 
     margin_of_error = 0.90001
-    cavex_c = torch.stack([torch.stack([
+
+    vex_c = torch.stack([torch.stack([
         torch.max(
             -torch.min(torch.hstack([
                 eigen_values[i][out], torch.tensor(0)]))) + margin_of_error
         for out in range(num_outputs)])
         for i in range(all_x.shape[0])])
 
-    output_c = torch.max(cavex_c, dim=0)
+    cave_c = torch.stack([torch.stack([
+        torch.min(
+            -torch.max(torch.hstack([
+                eigen_values[i][out], torch.tensor(0)]))) + margin_of_error
+        for out in range(num_outputs)])
+        for i in range(all_x.shape[0])])
 
-    return output_c[0]
+    abs_c = torch.stack([torch.stack([
+        torch.max(
+            torch.abs(torch.hstack([
+                eigen_values[i][out], torch.tensor(0)]))) + margin_of_error
+        for out in range(num_outputs)])
+        for i in range(all_x.shape[0])])
+
+    output_vex = torch.max(vex_c, dim=0)[0]
+    output_cave = torch.max(cave_c, dim=0)[0]
+    output_abs = torch.max(abs_c, dim=0)[0]
+
+    # return output_vex, output_cave, output_abs
+    return output_abs
 
 def piecewise_value(x, net_m, net_c, cavex_m, cavex_c, max_mindex=False):
     sy = []
@@ -96,14 +114,21 @@ def piecewise_value(x, net_m, net_c, cavex_m, cavex_c, max_mindex=False):
     min_cave_min = torch.min(cavey, dim=2)[1]
     max_vex_max2 = torch.max(sy + cavexy, dim=2)[1]
     min_cave_min2 = torch.min(sy - cavexy, dim=2)[1]
-    max_vex_max3 = torch.max(cavexy, dim=2)[1]
+    max_vex_max3 = torch.max(cavexy, dim=2)
     min_cave_min3 = torch.min(-cavexy, dim=2)[1]
     vex_sy = torch.stack([torch.stack(
-        [sy[j][i][output_i] for i, output_i in enumerate(idx)]) for j, idx in enumerate(max_vex_max3)])
+        [sy[j][i][output_i] for i, output_i in enumerate(idx)]) for j, idx in enumerate(max_vex_max3[1])])
     cave_sy = torch.stack([torch.stack(
         [sy[j][i][output_i] for i, output_i in enumerate(idx)]) for j, idx in enumerate(min_cave_min3)])
     if max_mindex:
         y = torch.transpose((vex_sy + cave_sy) / 2, 0, 1)
+        # y = torch.transpose((y_max - max_vex_max3[0]), 0, 1)
+        # y_max_cavexy = torch.stack([torch.stack(
+        #     [cavexy[j][i][output_i] for i, output_i in enumerate(idx)]) for j, idx in enumerate(torch.max(vexy, dim=2)[1])])
+        # y = torch.transpose((y_max - y_max_cavexy), 0, 1)
+        # cavexy_y_max = torch.stack([torch.stack(
+        #     [vexy[j][i][output_i] for i, output_i in enumerate(idx)]) for j, idx in enumerate(max_vex_max3[1])])
+        # y = torch.transpose((cavexy_y_max - max_vex_max3[0]), 0, 1)
     else:
         y = torch.transpose((y_min + y_max) / 2, 0, 1)
     return y
@@ -128,7 +153,6 @@ cavex_c = []
 
 hidden_size = model.layer[0].bias.shape[0]
 
-
 print("extracting Legendre transform")
 resolution = 5*8
 # spanning_data = torch.stack([
@@ -152,6 +176,7 @@ with torch.no_grad():
         cavex_const = calculate_c(model, images)
         c_list.append(cavex_const)
     cavex_const = torch.max(torch.stack(c_list), dim=0)[0]
+    # cavex_const = torch.ones(num_outputs) * 50
 
 print("calculating Legendre planes")
 for images, labels in tqdm(train_loader):
@@ -222,14 +247,14 @@ with torch.no_grad():
         correct_mindex += (pred == labels).sum().item()
 
         total += labels.size(0)
-        print("Current total {}".format(total))
-        print('Model testing accuracy: {} %'.format(100 * correct_m / total))
-        print('Legendre testing accuracy: {} %'.format(100 * correct_l / total))
-        print('Mindex Legendre testing accuracy: {} %'.format(100 * correct_mindex / total))
 
         all_m.append(out_m)
         all_l.append(out_l)
         all_mindex.append(mindex_out_l)
+# print("Current total {}".format(total))
+print('Model testing accuracy: {} %'.format(100 * correct_m / total))
+print('Legendre testing accuracy: {} %'.format(100 * correct_l / total))
+print('Mindex Legendre testing accuracy: {} %'.format(100 * correct_mindex / total))
 all_m = torch.vstack(all_m)
 all_l = torch.vstack(all_l)
 all_mindex = torch.vstack(all_mindex)
@@ -258,14 +283,14 @@ with torch.no_grad():
         correct_mindex += (pred == labels).sum().item()
 
         total += labels.size(0)
-        print("Current total {}".format(total))
-        print('Model testing accuracy: {} %'.format(100 * correct_m / total))
-        print('Legendre testing accuracy: {} %'.format(100 * correct_l / total))
-        print('Mindex Legendre testing accuracy: {} %'.format(100 * correct_mindex / total))
 
         all_m.append(out_m)
         all_l.append(out_l)
         all_mindex.append(mindex_out_l)
+# print("Current total {}".format(total))
+print('Model training accuracy: {} %'.format(100 * correct_m / total))
+print('Legendre training accuracy: {} %'.format(100 * correct_l / total))
+print('Mindex Legendre training accuracy: {} %'.format(100 * correct_mindex / total))
 all_m = torch.vstack(all_m)
 all_l = torch.vstack(all_l)
 all_mindex = torch.vstack(all_mindex)

@@ -140,10 +140,105 @@ def test_sample(x, net_m, net_c, cavex_m, cavex_c, population):
     return all_y
 
 def reverse_legendre():
-    reduced_nm = net_m[:, random_sample[best_agent].cpu().numpy(), :]
-    reduced_nc = net_c[:, random_sample[best_agent].cpu().numpy()]
-    reduced_vm = cavex_m[:, random_sample[best_agent].cpu().numpy(), :]
-    reduced_vc = cavex_c[:, random_sample[best_agent].cpu().numpy()]
+    agent_sample = np.sort(random_sample[best_agent].cpu().numpy())
+    reduced_nm = net_m[:, agent_sample, :]
+    reduced_nc = net_c[:, agent_sample]
+    reduced_vm = cavex_m[:, agent_sample, :]
+    reduced_vc = cavex_c[:, agent_sample]
+    sample_out = net_out[:, agent_sample]
+    sample_cavex = cavex_out[:, agent_sample]
+
+    vex_m = reduced_nm + reduced_vm
+    vex_c = reduced_nc + reduced_vc
+    cave_m = reduced_nm - reduced_vm
+    cave_c = reduced_nc - reduced_vc
+
+    x_per_output = []
+    out_comparison = []
+    for nm, nc, vm, vc, so, sc in zip(reduced_nm, reduced_nc, reduced_vm, reduced_vc, sample_out, sample_cavex):
+        '''
+        y*2
+        a = y - cvc
+        x = a / cvm 
+        '''
+        vex_m = torch.transpose(nm + vm, 0, 1)
+        vex_c = nc + vc
+        cave_m = torch.transpose(nm - vm, 0, 1)
+        cave_c = nc - vc
+        y = so #- sc
+        vex_x0 = (y - vex_c) / vex_m
+        cave_x0 = (y - cave_c) / cave_m
+        vex_xy = (2*y - vex_c) / vex_m
+        cave_xy = (2*y - cave_c) / cave_m
+        net_x0 = (y - nc) / torch.transpose(nm, 0, 1)
+        vex_x1 = (y - vc) / torch.transpose(vm, 0, 1)
+        cave_x1 = (y + vc) / torch.transpose(-vm, 0, 1)
+        vex_x2 = (y - cave_c) / vex_m
+        cave_x2 = (y - vex_c) / cave_m
+        spanning_data[agent_sample] = spanning_data[agent_sample]
+        x_per_output.append([vex_x0, cave_x0])
+        out_comparison.append([
+            torch.transpose(vex_x0, 0, 1),
+            torch.transpose(cave_x0, 0, 1),
+            torch.transpose((vex_x0 + cave_x0) / 2, 0, 1),
+            spanning_data[agent_sample],
+            piecewise_value(torch.transpose((vex_x0 + cave_x0) / 2, 0, 1),
+                            reduced_nm, reduced_nc,
+                            reduced_vm, reduced_vc,
+                            max_mindex=False),
+            torch.transpose(sample_out, 0, 1),
+            piecewise_value(torch.transpose((vex_x0 + cave_x0) / 2, 0, 1),
+                            reduced_nm, reduced_nc,
+                            reduced_vm, reduced_vc,
+                            max_mindex=False) - torch.transpose(sample_out, 0, 1),
+            piecewise_value(spanning_data[agent_sample],
+                            reduced_nm, reduced_nc,
+                            reduced_vm, reduced_vc,
+                            max_mindex=True),
+            piecewise_value(spanning_data[agent_sample],
+                            reduced_nm, reduced_nc,
+                            reduced_vm, reduced_vc,
+                            max_mindex=True) - torch.transpose(sample_out, 0, 1),
+            piecewise_value(spanning_data[agent_sample],
+                            reduced_nm, reduced_nc,
+                            reduced_vm, reduced_vc,
+                            max_mindex=False),
+            piecewise_value(spanning_data[agent_sample],
+                            reduced_nm, reduced_nc,
+                            reduced_vm, reduced_vc,
+                            max_mindex=False) - torch.transpose(sample_out, 0, 1),
+            piecewise_value(torch.transpose(vex_x0, 0, 1),
+                            reduced_nm, reduced_nc,
+                            reduced_vm, reduced_vc,
+                            max_mindex=False),
+            piecewise_value(torch.transpose(vex_x0, 0, 1),
+                            reduced_nm, reduced_nc,
+                            reduced_vm, reduced_vc,
+                            max_mindex=False) - torch.transpose(sample_out, 0, 1),
+            piecewise_value(torch.transpose(cave_x0, 0, 1),
+                            reduced_nm, reduced_nc,
+                            reduced_vm, reduced_vc,
+                            max_mindex=False),
+            piecewise_value(torch.transpose(cave_x0, 0, 1),
+                            reduced_nm, reduced_nc,
+                            reduced_vm, reduced_vc,
+                            max_mindex=False) - torch.transpose(sample_out, 0, 1),
+            piecewise_value(torch.transpose(vex_xy + cave_xy, 0, 1),
+                            reduced_nm, reduced_nc,
+                            reduced_vm, reduced_vc,
+                            max_mindex=False),
+            piecewise_value(torch.transpose(vex_xy + cave_xy, 0, 1),
+                            reduced_nm, reduced_nc,
+                            reduced_vm, reduced_vc,
+                            max_mindex=False) - torch.transpose(sample_out, 0, 1)])
+        out_comparison[-1].append(((out_comparison[-1][3] + out_comparison[-1][5])/2) - out_comparison[-1][1])
+        out_comparison[0][3][0] += 0.0001
+        x = -(vex_c + cave_c) / (vex_m + cave_m)
+        # torch.matmul(-(vex_c + cave_c), torch.transpose(torch.pinverse((vex_m + cave_m)), 1, 2))
+        # plane = torch.matmul(x, torch.transpose((vex_m + cave_m), 0, 1))
+        # piecewise_value(torch.transpose(vex_x0 + cave_x0, 0, 1), reduced_nm, reduced_nc, reduced_vm, reduced_vc,
+                        # max_mindex=False) - torch.transpose(sample_out, 0, 1)
+    return x_per_output
 
 
 
@@ -157,7 +252,7 @@ cavex_c = []
 hidden_size = model.layer[0].bias.shape[0]
 
 print("extracting Legendre transform")
-resolution = 5*8
+resolution = 3#5*8
 # spanning_data = torch.stack([
 #     torch.stack([torch.tensor([x, y]) for x in np.linspace(-1, 1, resolution)])
 #     for y in np.linspace(-1, 1, resolution)]
@@ -170,21 +265,22 @@ a_i = [i for i in range(resolution**2)]
 batch_indexes = [a_i[j*batch_size:(j+1)*batch_size] for j in range(int(np.ceil(resolution**2/batch_size)))]
 # out_b = model.layer[1].bias.data
 
-with torch.no_grad():
-    print("calculating Legendre c")
-    c_list = []
-    for images, labels in tqdm(train_loader):
-    # for b_i in tqdm(batch_indexes):
-    #     images = spanning_data[b_i]
-        cavex_const = calculate_c(model, images)
-        c_list.append(cavex_const)
-    cavex_const = torch.max(torch.stack(c_list), dim=0)[0]
-    # cavex_const = torch.ones(num_outputs) * 50
+# with torch.no_grad():
+#     print("calculating Legendre c")
+#     c_list = []
+#     for images, labels in tqdm(train_loader):
+#     # for b_i in tqdm(batch_indexes):
+#     #     images = spanning_data[b_i]
+#         cavex_const = calculate_c(model, images)
+#         c_list.append(cavex_const)
+#     cavex_const = torch.max(torch.stack(c_list), dim=0)[0]
+#     # cavex_const = torch.ones(num_outputs) * 50
+cavex_const = torch.tensor([31.6234, 32.9373])
 
 print("calculating Legendre planes")
-for images, labels in tqdm(train_loader):
-# for b_i in tqdm(batch_indexes):
-#     images = spanning_data[b_i]
+# for images, labels in tqdm(train_loader):
+for b_i in tqdm(batch_indexes):
+    images = spanning_data[b_i]
     images.requires_grad = True
     n_out = []
     n_m = []
@@ -218,6 +314,7 @@ cavex_m = torch.hstack(cavex_m)
 cavex_c = torch.hstack(cavex_c)
 
 print('', end='')
+out_l = piecewise_value(images, net_m, net_c, cavex_m, cavex_c)
 
 # full_vex_legendre_m = torch.vstack(full_vex_legendre_m)
 # full_vex_legendre_c = torch.vstack(full_vex_legendre_c)
@@ -228,8 +325,8 @@ print('', end='')
 # full_cave_legendre_m = torch.load('cave_m.pt')
 # full_cave_legendre_c = torch.load('cave_c.pt')
 
-sample_size = 10000
-genome_length = 8
+sample_size = 100
+genome_length = len(spanning_data)
 random_sample = torch.stack([torch.tensor(
     np.random.choice(range(net_c.shape[1]), genome_length, replace=False)) for i in range(sample_size)])
 correct_m = 0
