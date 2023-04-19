@@ -13,6 +13,9 @@ import seaborn as sns
 import gc
 import itertools
 from tqdm import tqdm
+import sys
+sys.path.append('/mnt/iusers01/gb01/mbaxrap7/scratch/neural_soup/Legendre')
+sys.path.append('/mnt/iusers01/gb01/mbaxrap7/scratch/neural_soup')
 from Legendre.train_mnist import NeuralNet
 
 sns.set_theme(style="whitegrid")
