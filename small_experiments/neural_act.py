@@ -35,15 +35,22 @@ lr = 0.0003
 momentum = 0.0000009
 learning = 1
 
-retest_rate = 100
+retest_rate = 10
 
 error_threshold = 0.3
 node = 0
 tri = 1
+'''
+best widths
+n0t1 = 0.1 
+n1t1 = 0.075
+n0t0 = 0.1
+n1t0 = 0.025 but lots of n 0.05 also ok
+'''
 
 # parameter_settings = [0.075, 0.1, 0.125, 0.15]
 # parameter_settings = [0.04]
-# parameter_settings = [0.05, 0.075, 0.1, 0.125, 0.15, 0.175, 0.2, 0.3]
+# parameter_settings = [0.01, 0.025, 0.05, 0.075, 0.1, 0.125, 0.15, 0.175, 0.2, 0.3]
 parameter_settings = [0.1]
 colours = pl.cm.gist_rainbow(np.linspace(0, 1, len(parameter_settings)))
 
@@ -339,9 +346,12 @@ for epoch in range(num_epochs):
                         correct[i] += (predicted[i] == labels).sum().item()
                     total += labels.size(0)
                 print(test_label)
-                for i in range(len(parameter_settings)):
-                    print('Testing accuracy: {} %  {} n{}'.format(100 * correct[i] / total, parameter_settings[i], models['{}'.format(parameter_settings[i])].hidden_size))
                 testing_accuracies.append(100 * np.array(correct) / total)
+                for i in range(len(parameter_settings)):
+                    print('Testing accuracy: {} %  {} n{}'.format(
+                        np.array(testing_accuracies).astype(float)[:, i],
+                        parameter_settings[i],
+                        models['{}'.format(parameter_settings[i])].hidden_size))
         # check_memory("loss2")
         for i in range(len(parameter_settings)):
             loss_[i] += loss[i].detach()
@@ -394,6 +404,7 @@ for epoch in range(num_epochs):
         plt.grid(visible=None, which='both')
         plt.savefig("./plots/{}.png".format(test_label), bbox_inches='tight', dpi=200, format='png')
         plt.close()
+
         print("done plotting")
 
 # torch.save(model, 'mnist_model.pt')

@@ -239,14 +239,11 @@ cavex_c = torch.hstack(cavex_c)
 
 print('', end='')
 
-# full_vex_legendre_m = torch.vstack(full_vex_legendre_m)
-# full_vex_legendre_c = torch.vstack(full_vex_legendre_c)
-# full_cave_legendre_m = torch.vstack(full_cave_legendre_m)
-# full_cave_legendre_c = torch.vstack(full_cave_legendre_c)
-# full_vex_legendre_m = torch.load('vex_m.pt')
-# full_vex_legendre_c = torch.load('vex_c.pt')
-# full_cave_legendre_m = torch.load('cave_m.pt')
-# full_cave_legendre_c = torch.load('cave_c.pt')
+torch.save(net_m, 'data/net_m {}.pt'.format(net_file))
+torch.save(net_c, 'data/net_c {}.pt'.format(net_file))
+torch.save(cavex_m, 'data/cavex_m {}.pt'.format(net_file))
+torch.save(cavex_c, 'data/cavex_c {}.pt'.format(net_file))
+
 
 print("calculating testing accuracy")
 metric_name = ['vex_cave', 'indexing', 'vex_sub_vex', 'vex_add_cave', 'cave_add_vex', 'cave_sub_cave', 'sub_indexed', 'indexed_y_sub_vex']
