@@ -1,24 +1,38 @@
-import time
-import torch
 from matplotlib import pyplot as plt
-from torch_cluster import grid_cluster, knn_graph
+# from torch_cluster import grid_cluster, knn_graph
 from fast_pytorch_kmeans import KMeans
 from torchvision import transforms, datasets
 import torch
 from tqdm import tqdm
-from Legendre.train_mnist import NeuralNet
+# from Legendre.train_mnist import NeuralNet
 
-use_cuda = torch.cuda.is_available()
-dtype = torch.float32 if use_cuda else torch.float64
-device = "cuda:0" if use_cuda else "cpu"
+gpu = True
+if gpu:
+    torch.set_default_tensor_type(torch.cuda.FloatTensor)
+    device = 'cuda'
+else:
+    torch.set_default_tensor_type(torch.FloatTensor)
+    device = 'cpu'
 
-sizes_of_k = [10, 25, 50, 100, 200, 400, 1000, 2500, 5000]
-repeats = 1
-cluster_all = False
+torch.manual_seed(272727)
+print("generating data")
+batch_size = 128
+c_size = 128
+trainset = datasets.MNIST('', download=True, train=True, transform=transforms.ToTensor())
+testset = datasets.MNIST('', download=True, train=False, transform=transforms.ToTensor())
+c_loader = torch.utils.data.DataLoader(trainset, batch_size=c_size,
+                                           shuffle=True, generator=torch.Generator(device=device))
+train_loader = torch.utils.data.DataLoader(trainset, batch_size=batch_size,
+                                           shuffle=True, generator=torch.Generator(device=device))
+test_loader = torch.utils.data.DataLoader(testset, batch_size=batch_size,
+                                          shuffle=True, generator=torch.Generator(device=device))
 
-'''
-cluster before and after combining
-'''
+sizes_of_k = [10, 25, 50, 100, 200, 400, 1000, 2500, 5000, 10000, 20000, 40000, 60000]
+repeats = 10
+max_iter = 1000
+cluster_all = True
+
+test_label = "cluster_all {} {}x{} max{}".format(cluster_all, repeats, sizes_of_k, max_iter)
 
 def full_all_to_net_cavex(fa, k):
     nm = torch.reshape(fa[:, :(280*28)], [k, 10, 784]).transpose(0, 1)
@@ -131,27 +145,16 @@ def piecewise_value(x, net_m, net_c, cavex_m, cavex_c, max_mindex=False):
 
 
 net_file = 'mnist0.5 sigmoid hidden_size[200] test_acc[98.1]'
+# net_file = 'mnist0.5 sigmoid cnnTrue hidden_size[200] test_acc[99.04]'
+# net_file = 'mnist0.5 relu hidden_size[200, 200] test_acc[98.51]'
+# net_file = 'mnist0.5 sigmoid hidden_size[200, 200] test_acc[98.11]'
+
+convert = True
+
+test_label += ' '
+test_label += net_file
 
 print("loading files")
-# net_m = torch.load('data/net_m {}.pt'.format(net_file))
-# net_c = torch.load('data/net_c {}.pt'.format(net_file))
-# cavex_m = torch.load('data/cavex_m {}.pt'.format(net_file))
-# cavex_c = torch.load('data/cavex_c {}.pt'.format(net_file))
-
-# cave_m = torch.load('data/cave_m {}.pt'.format(net_file))
-# cave_c = torch.load('data/cave_c {}.pt'.format(net_file))
-# full_cave = torch.hstack([cave_m.transpose(0, 1).reshape([cave_m.shape[1], cave_m.shape[0] * cave_m.shape[2]]),
-#                           cave_c.transpose(0, 1)])
-# torch.save(full_cave, 'data/full_cave {}.pt'.format(net_file))
-# vex_m = torch.load('data/vex_m {}.pt'.format(net_file))
-# vex_c = torch.load('data/vex_c {}.pt'.format(net_file))
-# full_vex = torch.hstack([vex_m.transpose(0, 1).reshape([vex_m.shape[1], vex_m.shape[0] * vex_m.shape[2]]),
-#                          vex_c.transpose(0, 1)])
-# torch.save(full_vex, 'data/full_vex {}.pt'.format(net_file))
-
-# reshaped_cm = cavex_m.transpose(0, 1).reshape([cavex_m.shape[1], cavex_m.shape[0] * cavex_m.shape[2]])
-# shaped_again = torch.reshape(reshaped_cm, [60000, 10, 784]).transpose(0, 1)
-# diff = torch.sum(torch.abs(shaped_again - cavex_m))
 
 # cave_m = net_m - cavex_m
 # cave_c = net_c - cavex_c
@@ -163,67 +166,70 @@ print("loading files")
 # torch.save(vex_m, 'data/vex_m {}.pt'.format(net_file))
 # torch.save(vex_c, 'data/vex_c {}.pt'.format(net_file))
 
-# full_cavex = torch.hstack([cavex_m.transpose(0, 1).reshape([cavex_m.shape[1], cavex_m.shape[0] * cavex_m.shape[2]]),
-#                            cavex_c.transpose(0, 1)])
+if convert:
+    net_m = torch.load('data/net_m {}.pt'.format(net_file))
+    net_c = torch.load('data/net_c {}.pt'.format(net_file))
+    cavex_m = torch.load('data/cavex_m {}.pt'.format(net_file))
+    cavex_c = torch.load('data/cavex_c {}.pt'.format(net_file))
 
-# reshaped_cm = cavex_m.transpose(0, 1).reshape([cavex_m.shape[1], cavex_m.shape[0] * cavex_m.shape[2]])
-# shaped_again = torch.reshape(reshaped_cm, [60000, 10, 784]).transpose(0, 1)
-# diff_m = torch.sum(torch.abs(shaped_again - cavex_m))
-#
-# reshaped_cc = cavex_c.transpose(0, 1)
-# shaped_again = reshaped_cc.transpose(0, 1)
-# diff_c = torch.sum(torch.abs(shaped_again - cavex_c))
+    print("Stacking and saving")
+    if cluster_all:
+        # full_cavex = torch.hstac`k([cavex_m.transpose(0, 1).reshape([cavex_m.shape[1], cavex_m.shape[0] * cavex_m.shape[2]]),
+        #                            cavex_c.transpose(0, 1)])
+        # torch.save(full_cavex, 'data/full_cavex {}.pt'.format(net_file))
+        # full_net = torch.hstack([net_m.transpose(0, 1).reshape([net_m.shape[1], net_m.shape[0] * net_m.shape[2]]),
+        #                          net_c.transpose(0, 1)])
+        # torch.save(full_net, 'data/full_net {}.pt'.format(net_file))
 
-# torch.save(full_cavex, 'data/full_cavex {}.pt'.format(net_file))
+        # full_net = torch.load('data/full_net {}.pt'.format(net_file))
+        # full_cavex = torch.load('data/full_cavex {}.pt'.format(net_file))`
+        full_all = torch.hstack([net_m.transpose(0, 1).reshape([net_m.shape[1], net_m.shape[0] * net_m.shape[2]]),
+                                 net_c.transpose(0, 1),
+                                 cavex_m.transpose(0, 1).reshape([net_m.shape[1], net_m.shape[0] * net_m.shape[2]]),
+                                 cavex_c.transpose(0, 1)
+                                 ])
+        # full_all = torch.hstack([full_net, full_cavex])
+        torch.save(full_all, 'data/full_all {}.pt'.format(net_file))
+    else:
+        cave_m = net_m - cavex_m
+        cave_c = net_c - cavex_c
+        vex_m = net_m + cavex_m
+        vex_c = net_c + cavex_c
 
-# full_net = torch.hstack([net_m.transpose(0, 1).reshape([net_m.shape[1], net_m.shape[0] * net_m.shape[2]]),
-#                          net_c.transpose(0, 1)])
-#
-# shaped_again = torch.reshape(full_net[:, :280*28], [60000, 10, 784]).transpose(0, 1)
-# diff_m = torch.sum(torch.abs(shaped_again - net_m))
-#
-# shaped_again = full_net[:, 280*28:(280*28)+10].transpose(0, 1)
-# diff_c = torch.sum(torch.abs(shaped_again - net_c))
-# torch.save(full_net, 'data/full_net {}.pt'.format(net_file))
-# full_net = torch.load('data/full_net {}.pt'.format(net_file))
-# full_cavex = torch.load('data/full_cavex {}.pt'.format(net_file))
-print("Stacking")
-# full_all = torch.hstack([net_m.transpose(0, 1).reshape([net_m.shape[1], net_m.shape[0] * net_m.shape[2]]),
-#                          net_c.transpose(0, 1),
-#                          cavex_m.transpose(0, 1).reshape([net_m.shape[1], net_m.shape[0] * net_m.shape[2]]),
-#                          cavex_c.transpose(0, 1)
-#                          ])
-# full_all = torch.hstack([full_net, full_cavex])
-# torch.save(full_all, 'data/full_all {}.pt'.format(net_file))
-# full_all = torch.load('data/full_all {}.pt'.format(net_file))
+        # torch.save(cave_m, 'data/cave_m {}.pt'.format(net_file))
+        # torch.save(cave_c, 'data/cave_c {}.pt'.format(net_file))
+        # torch.save(vex_m, 'data/vex_m {}.pt'.format(net_file))
+        # torch.save(vex_c, 'data/vex_c {}.pt'.format(net_file))
 
-# full_cave = torch.load('data/full_cave {}.pt'.format(net_file))
-# full_vex = torch.load('data/full_vex {}.pt'.format(net_file))
+        # cave_m = torch.load('data/cave_m {}.pt'.format(net_file))
+        # cave_c = torch.load('data/cave_c {}.pt'.format(net_file))
+        full_cave = torch.hstack([cave_m.transpose(0, 1).reshape([cave_m.shape[1], cave_m.shape[0] * cave_m.shape[2]]),
+                                  cave_c.transpose(0, 1)])
+        torch.save(full_cave, 'data/full_cave {}.pt'.format(net_file))
 
-# cm = torch.reshape(full_all[:, (280 * 28) + 10:(280 * 28) + (280 * 28) + 10], [60000, 10, 784]).transpose(0, 1)
-# cc = torch.reshape(full_all[:, -10:], [60000, 10]).transpose(0, 1)
+        # vex_m = torch.load('data/vex_m {}.pt'.format(net_file))
+        # vex_c = torch.load('data/vex_c {}.pt'.format(net_file))
+        full_vex = torch.hstack([vex_m.transpose(0, 1).reshape([vex_m.shape[1], vex_m.shape[0] * vex_m.shape[2]]),
+                                 vex_c.transpose(0, 1)])
+        torch.save(full_vex, 'data/full_vex {}.pt'.format(net_file))
 
-# diff_m = torch.sum(torch.abs(cm - cavex_m))
-# diff_c = torch.sum(torch.abs(cc - cavex_c))
+    # full_all = torch.load('data/full_all {}.pt'.format(net_file))
 
-print("K it means what?")
-# cl, c = KMeans(full_all, 10)
-
-# N, D = 10000, 2
-# x = 0.7 * torch.randn(N, D, dtype=dtype, device=device_id) + 0.3
+    # full_cave = torch.load('data/full_cave {}.pt'.format(net_file))
+    # full_vex = torch.load('data/full_vex {}.pt'.format(net_file))
 
 print("generating data")
-batch_size = 128
-c_size = 128
-trainset = datasets.MNIST('', download=True, train=True, transform=transforms.ToTensor())
-testset = datasets.MNIST('', download=True, train=False, transform=transforms.ToTensor())
-c_loader = torch.utils.data.DataLoader(trainset, batch_size=c_size,
-                                           shuffle=True, generator=torch.Generator(device=device))
-train_loader = torch.utils.data.DataLoader(trainset, batch_size=batch_size,
-                                           shuffle=True, generator=torch.Generator(device=device))
-test_loader = torch.utils.data.DataLoader(testset, batch_size=batch_size,
-                                          shuffle=True, generator=torch.Generator(device=device))
+# batch_size = 128
+# # c_size = 128
+# # trainset = datasets.MNIST('', download=True, train=True, transform=transforms.ToTensor())
+# testset = datasets.MNIST('', download=True, train=False, transform=transforms.ToTensor())
+# # train_loader = torch.utils.data.DataLoader(trainset, batch_size=batch_size,
+# #                                            shuffle=True, generator=torch.Generator(device=device))
+# test_loader = torch.utils.data.DataLoader(testset, batch_size=batch_size,
+#                                           shuffle=True, generator=torch.Generator(device=device))
 
+
+print("K it means what?")
 if cluster_all:
     full_all = torch.load('data/full_all {}.pt'.format(net_file))
     x = full_all
@@ -235,7 +241,7 @@ if cluster_all:
                       'cave_sub_cave': [], 'sub_indexed': [], 'indexed_y_sub_vex': []}
         for r in range(repeats):
             print("Starting repeat {}/{} of size {}".format(r+1, repeats, K))
-            kmeans = KMeans(n_clusters=K, mode='euclidean', verbose=1)
+            kmeans = KMeans(n_clusters=K, mode='euclidean', verbose=1, max_iter=max_iter)
             labels = kmeans.fit_predict(x)
             centroids = kmeans.centroids
             net_m, net_c, cavex_m, cavex_c = full_all_to_net_cavex(centroids, K)
@@ -261,6 +267,40 @@ if cluster_all:
             for correct, name in zip(correct_out, metric_name):
                 print('{} testing accuracy: {} %'.format(name, 100 * correct / total))
                 results[K][name].append(100 * correct / total)
+
+        # for out, output_images in enumerate(net_m):
+        #     print("imaging class", out)
+        #     output = torch.sum(output_images, dim=0)
+        #     output = output.reshape([28, 28])
+        #     plt.imshow(output.cpu(), cmap='gray', interpolation='nearest', aspect='auto')  # , vmin=0, vmax=1)
+        #     # plt.axis('off')
+        #     plt.colorbar()
+        #     plt.savefig("./plots/net_ave o{} k{} {}.png".format(out, K, test_label), bbox_inches='tight',
+        #                 dpi=200)
+        #     plt.close()
+        # for im, output_images in enumerate((net_m).transpose(0, 1)):
+        #     print("image", im)
+        #     for out, output in enumerate(output_images):
+        #         print("imaging class", out)
+        #         output = output.reshape([28, 28])
+        #         plt.imshow(output.cpu(), cmap='hot', interpolation='nearest', aspect='auto')  # , vmin=0, vmax=1)
+        #         # plt.axis('off')
+        #         plt.colorbar()
+        #         plt.savefig("./plots/im{} o{} k{} {}.png".format(im, out, K, test_label), bbox_inches='tight', dpi=200)
+        #         plt.close()
+        # for im, (output_images, im_c) in enumerate(zip(cavex_m.transpose(0, 1), cavex_c.transpose(0, 1))):
+        #     print("image", im)
+        #     for out, (output, out_c) in enumerate(zip(output_images, im_c)):
+        #         print("imaging class", out)
+        #         output = (output + out_c).reshape([28, 28])
+        #         plt.imshow(output.cpu(), cmap='hot', interpolation='nearest', aspect='auto')  # , vmin=0, vmax=1)
+        #         # plt.axis('off')
+        #         plt.colorbar()
+        #         plt.savefig("./plots/cv+c im{} o{} k{} {}.png".format(im, out, K, test_label), bbox_inches='tight',
+        #                     dpi=200)
+        #         plt.close()
+        torch.save(results, 'data/results {}.pt'.format(test_label))
+        print("Finished K=", K)
 else:
     full_cave = torch.load('data/full_cave {}.pt'.format(net_file))
     full_vex = torch.load('data/full_vex {}.pt'.format(net_file))
@@ -269,8 +309,8 @@ else:
         results[K] = []
         for r in range(repeats):
             print("Starting repeat {}/{} of size {}".format(r+1, repeats, K))
-            cave_means = KMeans(n_clusters=K, mode='euclidean', verbose=1)
-            vex_means = KMeans(n_clusters=K, mode='euclidean', verbose=1)
+            cave_means = KMeans(n_clusters=K, mode='euclidean', verbose=1, max_iter=max_iter)
+            vex_means = KMeans(n_clusters=K, mode='euclidean', verbose=1, max_iter=max_iter)
             _ = cave_means.fit_predict(full_cave)
             _ = vex_means.fit_predict(full_vex)
             cave_centroids = cave_means.centroids
@@ -293,18 +333,56 @@ else:
             results[K].append(100 * correct_v / total)
 
 
+        # for im, output_images in enumerate((cave_m).transpose(0, 1)):
+        #     print("image", im)
+        #     for out, output in enumerate(output_images):
+        #         print("imaging class", out)
+        #         output = output.reshape([28, 28])
+        #         plt.imshow(output.cpu(), cmap='hot', interpolation='nearest', aspect='auto')  # , vmin=0, vmax=1)
+        #         # plt.axis('off')
+        #         plt.colorbar()
+        #         plt.savefig("./plots/cave im{} o{} k{} {}.png".format(im, out, K, test_label), bbox_inches='tight', dpi=200)
+        #         plt.close()
+        # for im, output_images in enumerate((vex_m).transpose(0, 1)):
+        #     print("image", im)
+        #     for out, output in enumerate(output_images):
+        #         print("imaging class", out)
+        #         output = output.reshape([28, 28])
+        #         plt.imshow(output.cpu(), cmap='hot', interpolation='nearest', aspect='auto')  # , vmin=0, vmax=1)
+        #         # plt.axis('off')
+        #         plt.colorbar()
+        #         plt.savefig("./plots/vex im{} o{} k{} {}.png".format(im, out, K, test_label), bbox_inches='tight', dpi=200)
+        #         plt.close()
+
+        # for im, (output_images, im_c) in enumerate(zip(cave_m.transpose(0, 1), cave_c)):
+        #     print("image", im)
+        #     for out, (output, out_c) in enumerate(zip(output_images, im_c)):
+        #         print("imaging class", out)
+        #         output = (output + out_c).reshape([28, 28])
+        torch.save(results, 'data/results {}.pt'.format(test_label))
+        print("Finished K=", K)
+
+
+
+for im, output_images in enumerate(cave_m.transpose(0, 1)):
+    print("image", im)
+    for out, output in enumerate(output_images):
+        print("imaging class", out)
+        output = output.reshape([28, 28])
+        plt.imshow(output, cmap='hot', interpolation='nearest', aspect='auto')#, vmin=0, vmax=1)
+        # plt.axis('off')
+        plt.colorbar()
+        plt.savefig("./plots/im{} o{} exp {}.png".format(im, out, test_label), bbox_inches='tight', dpi=200)
+        plt.close()
+
+# N, D = 10000, 2
+# x = 0.7 * torch.randn(N, D, dtype=dtype, device=device_id) + 0.3
+
 # plt.figure(figsize=(8, 8))
 # plt.scatter(x[:, 0].cpu(), x[:, 1].cpu(), c=labels.cpu(), s=30000 / len(x), cmap="tab10")
 # plt.scatter(kmeans.centroids[:, 0].cpu(), kmeans.centroids[:, 1].cpu(), c="black", s=50, alpha=0.8)
 # # plt.axis([-2, 2, -2, 2])
 # plt.tight_layout()
 # plt.show()
-
-# torch.save(net_m, 'data/net_m {}.pt'.format(net_file))
-# torch.save(net_c, 'data/net_c {}.pt'.format(net_file))
-# torch.save(cavex_m, 'data/cavex_m {}.pt'.format(net_file))
-# torch.save(cavex_c, 'data/cavex_c {}.pt'.format(net_file))
-
-
 
 print("Done")

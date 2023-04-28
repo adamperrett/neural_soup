@@ -31,15 +31,15 @@ Train an adaptive neuron. It starts as a triangle kernel and learns 'broader' re
 input_size = 28 * 28
 num_classes = 10
 num_epochs = 100
-lr = 0.0003
-momentum = 0.0000009
-learning = 1
+lr = 0.03
+momentum = 0.9
+learning = 0
 
 retest_rate = 10
 
 error_threshold = 0.3
 node = 0
-tri = 1
+tri = 0
 '''
 best widths
 n0t1 = 0.1 
@@ -91,7 +91,9 @@ class Gaussian(nn.Module):
 
     def __init__(self, mean=0, std=1):
         super(Gaussian, self).__init__()
-        self.mean = mean
+        self.mean = torch.nn.Parameter(mean)
+        # self.mean = mean
+        # self.std = torch.nn.Parameter(torch.Tensor([std for i in range(len(mean))]))
         self.std = std
 
     def forward(self, x, batch_size):
@@ -312,7 +314,7 @@ for epoch in range(num_epochs):
 
         optimize_all.zero_grad()
 
-        if learning and epoch:
+        if learning:# and epoch:
             for l in loss:
                 l.backward()
             optimize_all.step()

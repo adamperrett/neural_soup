@@ -48,13 +48,44 @@ class MyLinear(nn.Linear):
 
 # Fully connected neural network with one hidden layer
 class NeuralNet(nn.Module):
-    def __init__(self, input_size, hidden_size, num_classes, p, neuron_types, dropout=False):
+    def __init__(self, input_size, hidden_size, num_classes, p, neuron_types, dropout=False, conv=True):
         super(NeuralNet, self).__init__()
         # if dropout:
         #     self.fc1 = MyLinear(input_size, hidden_size, p)
         # else:
+        self.functions = {'relu': nn.ReLU(),
+                          'tanh': nn.Tanh(),
+                          'sig': nn.Sigmoid(),
+                          'smin': nn.Softmax(dim=1),
+                          'smax': nn.Softmin(dim=1),
+                          'gelu': nn.GELU(),
+                          # 'mha': nn.MultiheadAttention(),
+                          'lrelu': nn.LeakyReLU()
+                          }
+
         self.layer = nn.ModuleList()
-        self.layer.append(nn.Linear(input_size, hidden_size[0]))
+        self.conv = conv
+        if conv:
+            self.conv1 = nn.Sequential(
+                nn.Conv2d(
+                    in_channels=1,
+                    out_channels=16,
+                    kernel_size=5,
+                    stride=1,
+                    padding=2,
+                ),
+                self.functions[neuron_types[0]],
+                nn.MaxPool2d(kernel_size=2),
+            )
+            self.conv2 = nn.Sequential(
+                nn.Conv2d(16, 32, 5, 1, 2),
+                self.functions[neuron_types[0]],
+                nn.MaxPool2d(2),
+            )  # fully connected layer, output 10 classes
+            # self.out = nn.Linear(32 * 7 * 7, 10)
+            self.layer.append(nn.Linear(32 * 7 * 7, hidden_size[0]))
+        else:
+            self.layer.append(nn.Linear(input_size, hidden_size[0]))
         self.neuron_types = neuron_types
         self.splits = [np.random.choice(self.neuron_types, hidden_size[0])]
         self.act_idxs = [{n_type: np.where(self.splits[-1] == n_type)[0] for n_type in self.neuron_types}]
@@ -65,16 +96,6 @@ class NeuralNet(nn.Module):
             self.act_idxs.append({n_type: np.where(self.splits[-1] == n_type)[0] for n_type in self.neuron_types})
 
         self.layer.append(nn.Linear(hidden_size[-1], num_classes, bias=False))
-
-        self.functions = {'relu': nn.ReLU(),
-                          'tanh': nn.Tanh(),
-                          'sig': nn.Sigmoid(),
-                          'smin': nn.Softmax(dim=1),
-                          'smax': nn.Softmin(dim=1),
-                          'gelu': nn.GELU(),
-                          # 'mha': nn.MultiheadAttention(),
-                          'lrelu': nn.LeakyReLU()
-                          }
 
         # self.fc2 = nn.Linear(hidden_size, num_classes)
         # if dropout:
@@ -90,6 +111,10 @@ class NeuralNet(nn.Module):
         return combined
 
     def forward(self, x):
+        if self.conv:
+            x = self.conv1(x)
+            x = self.conv2(x)        # flatten the output of conv2 to (batch_size, 32 * 7 * 7)
+            x = x.view(x.size(0), -1)
         out = self.layer[0](x)
         out = self.mixed_act(out, 0)
         for i in range(1, len(self.layer) - 1):
@@ -101,6 +126,10 @@ class NeuralNet(nn.Module):
 
     def separate_outputs(self, output):
         def output_n(x):
+            if self.conv:
+                x = self.conv1(x)
+                x = self.conv2(x)        # flatten the output of conv2 to (batch_size, 32 * 7 * 7)
+                x = x.view(x.size(0), -1)
             out = self.layer[0](x)
             out = self.mixed_act(out, 0)
             for i in range(1, len(self.layer) - 1):
@@ -130,6 +159,7 @@ if __name__ == '__main__':
     lr = 0.05
     momentum = 0.9
 
+    conv = True
     hidden_size = [200]
     # levels_of_dropout = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95]
     levels_of_dropout = [0.5]
@@ -160,7 +190,7 @@ if __name__ == '__main__':
     # for p in levels_of_dropout:
     for nt in neuron_types:
         models['{}'.format(nt)] = NeuralNet(input_size, hidden_size, num_classes,
-                                            neuron_types=nt, p=levels_of_dropout[0]).to(device)
+                                            neuron_types=nt, p=levels_of_dropout[0], conv=conv).to(device)
         params.append({'params': models['{}'.format(nt)].parameters()})
 
     # lossFunction = nn.NLLLoss()
@@ -176,7 +206,10 @@ if __name__ == '__main__':
         loss_ = [0 for i in range(len(neuron_types))]
         for images, labels in train_loader:
             # Flatten the input images of [28,28] to [1,784]
-            images = images.reshape(-1, 784).to(torch.device(device)) - 0.5
+            if conv:
+                images = images.to(torch.device(device)) - 0.5
+            else:
+                images = images.reshape(-1, 784).to(torch.device(device)) - 0.5
 
             output = []
             for p in models:
@@ -207,7 +240,10 @@ if __name__ == '__main__':
             correct = [0 for i in range(len(neuron_types))]
             total = 0
             for images, labels in test_loader:
-                images = images.reshape(-1, 784).to(torch.device(device)) - 0.5
+                if conv:
+                    images = images.to(torch.device(device)) - 0.5
+                else:
+                    images = images.reshape(-1, 784).to(torch.device(device)) - 0.5
                 out = []
                 for p in models:
                     out.append(models[p](images))
@@ -230,8 +266,8 @@ if __name__ == '__main__':
     for i, p, in enumerate(models):
         print("\n", p, "\n", np.array(testing_accuracies).astype(float)[:, i])
 
-    test_label = "hidden_size{} test_acc{}".format(hidden_size, testing_accuracies[-1])
+    test_label = "cnn{} hidden_size{} test_acc{}".format(conv, hidden_size, testing_accuracies[-1])
     for m in models:
-        torch.save(models[m], 'mnist0.5 sigmoid {}.pt'.format(test_label))
+        torch.save(models[m], 'data/mnist0.5 sigmoid {}.pt'.format(test_label))
 
     print('done')
