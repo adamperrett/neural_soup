@@ -159,14 +159,14 @@ if __name__ == '__main__':
     lr = 0.05
     momentum = 0.9
 
-    conv = True
-    hidden_size = [200]
+    conv = False
+    hidden_size = [200, 200]
     # levels_of_dropout = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95]
     levels_of_dropout = [0.5]
     neuron_types = [
-        # ['relu'],
+        ['relu'],
         # ['tanh'],
-        ['sig'],
+        # ['sig'],
         # ['smin'],
         # ['smax'],
         # ['smin', 'smax'],

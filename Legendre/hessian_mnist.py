@@ -48,11 +48,13 @@ test_loader = torch.utils.data.DataLoader(testset, batch_size=batch_size,
 print("loading net")
 # net_file = 'mnist sigmoid hidden_size[2000] test_acc[98.1]'
 # net_file = 'mnist sigmoid hidden_size[200] test_acc[98.05]'
-net_file = 'mnist0.5 sigmoid hidden_size[200] test_acc[98.1]'
+# net_file = 'mnist0.5 sigmoid hidden_size[200] test_acc[98.1]'
 # net_file = 'mnist0.5 sigmoid hidden_size[200, 200] test_acc[98.11]'
 # net_file = 'mnist0.5 relu hidden_size[200, 200] test_acc[98.51]'
+net_file = 'mnist0.5 sigmoid cnnFalse hidden_size[200, 200] test_acc[98.11]'
+# net_file = 'mnist0.5 relu cnnFalse hidden_size[200, 200] test_acc[98.5]'
 # net_file = 'mnist0.5 sigmoid cnnTrue hidden_size[200] test_acc[99.04]'
-conv = True
+conv = False
 model = torch.load('data/'+net_file+'.pt')
 
 num_outputs = 10
