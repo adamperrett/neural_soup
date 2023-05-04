@@ -227,7 +227,7 @@ if __name__ == '__main__':
             optimize_all.step()
 
             for i in range(len(neuron_types)):
-                loss_[i] += loss[i]
+                loss_[i] += loss[i].detach().cpu()
 
         for i in range(len(neuron_types)):
             print("Epoch{}, Training loss:{} types:{}".format(epoch,

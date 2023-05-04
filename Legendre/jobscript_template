@@ -1,12 +1,15 @@
 #!/bin/bash --login
 #$ -cwd
 #$ -pe smp.pe 4
-#$ -l nvidia_a100=1
+#$ -l nvidia_v100=1
+#$ -m ea
+#$ -M adam.perrett@manchester.ac.uk
+#$ -t 1-8
 
 module load apps/binapps/anaconda3/4.2.0
 module load tools/env/proxy
 
 source activate venv
 
-#python3 hessian_mnist.py
-python3 clustering_planes.py
+python3 hessian_mnist.py ${SGE_TASK_ID}
+#python3 clustering_planes.py$ {SGE_TASK_ID}
