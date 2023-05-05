@@ -12,4 +12,4 @@ module load tools/env/proxy
 source activate venv
 
 python3 hessian_mnist.py ${SGE_TASK_ID}
-#python3 clustering_planes.py$ {SGE_TASK_ID}
+#python3 clustering_planes.py ${SGE_TASK_ID}

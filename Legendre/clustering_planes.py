@@ -154,24 +154,31 @@ file_number = int(sys.argv[1])
 # net_file = 'mnist0.5 relu hidden_size[200, 200] test_acc[98.51]'
 # net_file = 'mnist0.5 sigmoid cnnFalse hidden_size[200, 200] test_acc[98.11]'
 
-if file_number == 0:
-    net_file = 'mnist0.5 relu cnnFalse hidden_size[200, 200] test_acc[98.5]'
 if file_number == 1:
-    net_file = 'mnist0.5 sigmoid cnnFalse hidden_size[200, 200, 200, 200] test_acc[97.49]'
+    net_file = 'mnist0.5 sigmoid cnnFalse hidden_size[200, 200, 200, 200, 200] test_acc[98.47]'
 if file_number == 2:
-    net_file = 'mnist0.5 sigmoid cnnFalse hidden_size[200, 200, 200] test_acc[97.9]'
+    net_file = 'mnist0.5 sigmoid cnnFalse hidden_size[200, 200, 200, 200] test_acc[98.53]'
 if file_number == 3:
-    net_file = 'mnist0.5 sigmoid hidden_size[200, 200] test_acc[98.11]'
-if file_number == 4:
-    net_file = 'mnist0.5 sigmoid cnnFalse hidden_size[1600] test_acc[98.27]'
-if file_number == 5:
-    net_file = 'mnist0.5 sigmoid cnnFalse hidden_size[800] test_acc[98.18]'
-if file_number == 6:
-    net_file = 'mnist0.5 sigmoid cnnFalse hidden_size[400] test_acc[98.24]'
-if file_number == 7:
-    net_file = 'mnist0.5 sigmoid cnnTrue hidden_size[200] test_acc[99.04]'
-if file_number == 8:
-    net_file = 'mnist0.5 sigmoid hidden_size[200] test_acc[98.1]'
+    net_file = 'mnist0.5 sigmoid cnnFalse hidden_size[400, 400, 400, 400] test_acc[98.54]'
+
+# if file_number == 1:
+#     net_file = 'mnist0.5 sigmoid cnnFalse hidden_size[200, 200, 200, 200] test_acc[97.49]'
+# if file_number == 2:
+#     net_file = 'mnist0.5 sigmoid cnnFalse hidden_size[200, 200, 200] test_acc[97.9]'
+# if file_number == 3:
+#     net_file = 'mnist0.5 sigmoid hidden_size[200, 200] test_acc[98.11]'
+# if file_number == 4:
+#     net_file = 'mnist0.5 sigmoid cnnFalse hidden_size[1600] test_acc[98.27]'
+# if file_number == 5:
+#     net_file = 'mnist0.5 sigmoid cnnFalse hidden_size[800] test_acc[98.18]'
+# if file_number == 6:
+#     net_file = 'mnist0.5 sigmoid cnnFalse hidden_size[400] test_acc[98.24]'
+# if file_number == 7:
+#     net_file = 'mnist0.5 sigmoid cnnTrue hidden_size[200] test_acc[99.04]'
+# if file_number == 8:
+#     net_file = 'mnist0.5 sigmoid hidden_size[200] test_acc[98.1]'
+# if file_number == 9:
+#     net_file = 'mnist0.5 relu cnnFalse hidden_size[200, 200] test_acc[98.5]'
 
 convert = True
 
@@ -291,7 +298,7 @@ if cluster_all:
             for correct, name in zip(correct_out, metric_name):
                 print('{} testing accuracy: {} %'.format(name, 100 * correct / total))
                 results[K][name].append(100 * correct / total)
-        if K == sizes_of_k[0] and not r:
+        if K == sizes_of_k[0]:
             for out, output_images in enumerate(net_m):
                 print("imaging class", out)
                 output = torch.mean(output_images, dim=0)
@@ -388,16 +395,16 @@ else:
 
 
 
-for im, output_images in enumerate(cave_m.transpose(0, 1)):
-    print("image", im)
-    for out, output in enumerate(output_images):
-        print("imaging class", out)
-        output = output.reshape([28, 28])
-        plt.imshow(output, cmap='hot', interpolation='nearest', aspect='auto')#, vmin=0, vmax=1)
-        # plt.axis('off')
-        plt.colorbar()
-        plt.savefig("./plots/im{} o{} exp {}.png".format(im, out, test_label), bbox_inches='tight', dpi=200)
-        plt.close()
+# for im, output_images in enumerate(cave_m.transpose(0, 1)):
+#     print("image", im)
+#     for out, output in enumerate(output_images):
+#         print("imaging class", out)
+#         output = output.reshape([28, 28])
+#         plt.imshow(output, cmap='hot', interpolation='nearest', aspect='auto')#, vmin=0, vmax=1)
+#         # plt.axis('off')
+#         plt.colorbar()
+#         plt.savefig("./plots/im{} o{} exp {}.png".format(im, out, test_label), bbox_inches='tight', dpi=200)
+#         plt.close()
 
 # N, D = 10000, 2
 # x = 0.7 * torch.randn(N, D, dtype=dtype, device=device_id) + 0.3

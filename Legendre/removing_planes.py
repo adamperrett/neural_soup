@@ -8,7 +8,7 @@ from tqdm import tqdm
 
 use_cuda = torch.cuda.is_available()
 dtype = torch.float32 if use_cuda else torch.float64
-device = "cuda:0" if use_cuda else "cpu"
+device = "cuda" if use_cuda else "cpu"
 
 '''
 removal techniques:
@@ -26,15 +26,20 @@ remove_all = True
 
 test_label = "remove_all {} {}x{} max{}".format(remove_all, repeats, sizes_of_k, max_iter)
 
-def normalise_and_remove(list_of_values, final_size):
+def normalise_and_remove(list_of_values, final_size, p=2):
     if list_of_values.shape[0] < final_size:
         return list_of_values
     mins = torch.min(list_of_values, dim=0)[0]
     ranges = torch.max(list_of_values - mins, dim=0)[0]
     list_of_values -= mins
-    list_of_values /= ranges
+    list_of_values /= ranges + (ranges == 0)
     dist = torch.cdist(list_of_values, list_of_values, p=2)
-    shortest_distances = torch.min(dist, dim=0)
+    length = dist.shape[0]
+    dist = dist.reshape(length*length)
+    largest_distances = torch.topk(dist, k=final_size)
+    dist += (torch.eye(length).to(device) * torch.max(dist)).reshape(length*length)
+    shortest_distances = torch.topk(dist, k=length-final_size, largest=False)
+    return shortest_distances
 
 def full_all_to_net_cavex(fa, k):
     nm = torch.reshape(fa[:, :(280*28)], [k, 10, 784]).transpose(0, 1)
@@ -224,8 +229,7 @@ if remove_all:
                       'cave_sub_cave': [], 'sub_indexed': [], 'indexed_y_sub_vex': []}
         for r in range(repeats):
             print("Starting repeat {}/{} of size {}".format(r+1, repeats, K))
-            normalise_and_remove(full_all[:1000, :], 10)
-            net_m, net_c, cavex_m, cavex_c = full_all_to_net_cavex(centroids, K)
+            net_m, net_c, cavex_m, cavex_c = normalise_and_remove(full_all[:100, :], 10)
             print("calculating testing accuracy")
             metrics = len(metric_name)
             with torch.no_grad():
