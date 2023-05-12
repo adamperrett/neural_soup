@@ -29,8 +29,9 @@ repeats = 100
 max_iter = 10
 remove_all = True
 random = False
+p = 2
 
-test_label = "remove_all rand{} {} {}x{} max{}".format(random, remove_all, repeats, sizes_of_k, max_iter)
+test_label = "remove_all rand{} p{} {} {}x{} max{}".format(random, p, remove_all, repeats, sizes_of_k, max_iter)
 
 def selected_smallest_distances(normalised_values, final_size, p=2):
     mins = torch.min(normalised_values, dim=0)[0]
@@ -52,13 +53,16 @@ def selected_smallest_distances(normalised_values, final_size, p=2):
         index += 1
     return torch.hstack(chosen_indexes)
 
-def normalise_and_remove(list_of_values, final_size, p=2, random=True):
+def normalise_and_remove(final_size, p=2, random=True):
+    list_of_values = torch.load('data/full_all {}.pt'.format(net_file))[:100, :]
     if list_of_values.shape[0] < final_size:
         return list_of_values
     if random:
         indexes = np.random.randint(0, len(list_of_values), final_size)
         return full_all_to_net_cavex(list_of_values[indexes], final_size)
-    chosen_indexes = selected_smallest_distances(list_of_values, final_size, p=2)
+    chosen_indexes = selected_smallest_distances(list_of_values, final_size, p=p)
+    del list_of_values
+    torch.cuda.empty_cache()
     list_of_values = torch.load('data/full_all {}.pt'.format(net_file))
     return full_all_to_net_cavex(list_of_values[chosen_indexes], final_size)
 
@@ -229,19 +233,18 @@ print("loading files")
 print("generating data")
 batch_size = 128
 c_size = 128
-trainset = datasets.MNIST('', download=True, train=True, transform=transforms.ToTensor())
+# trainset = datasets.MNIST('', download=True, train=True, transform=transforms.ToTensor())
 testset = datasets.MNIST('', download=True, train=False, transform=transforms.ToTensor())
-c_loader = torch.utils.data.DataLoader(trainset, batch_size=c_size,
-                                           shuffle=True, generator=torch.Generator(device=device))
-train_loader = torch.utils.data.DataLoader(trainset, batch_size=batch_size,
-                                           shuffle=True, generator=torch.Generator(device=device))
+# c_loader = torch.utils.data.DataLoader(trainset, batch_size=c_size,
+#                                            shuffle=True, generator=torch.Generator(device=device))
+# train_loader = torch.utils.data.DataLoader(trainset, batch_size=batch_size,
+#                                            shuffle=True, generator=torch.Generator(device=device))
 test_loader = torch.utils.data.DataLoader(testset, batch_size=batch_size,
                                           shuffle=True, generator=torch.Generator(device=device))
 
 
 print("K it means what?")
 if remove_all:
-    full_all = torch.load('data/full_all {}.pt'.format(net_file))
     results = {}
     metric_name = ['vex_cave', 'indexing', 'vex_sub_vex', 'vex_add_cave', 'cave_add_vex', 'cave_sub_cave',
                    'sub_indexed', 'indexed_y_sub_vex']
@@ -252,7 +255,7 @@ if remove_all:
             repeats = 1
         for r in range(repeats):
             print("Starting repeat {}/{} of size {}".format(r+1, repeats, K))
-            net_m, net_c, cavex_m, cavex_c = normalise_and_remove(full_all, K, random=random)
+            net_m, net_c, cavex_m, cavex_c = normalise_and_remove(K, random=random, p=p)
             print("calculating testing accuracy")
             metrics = len(metric_name)
             with torch.no_grad():
