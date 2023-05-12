@@ -32,19 +32,12 @@ random = False
 
 test_label = "remove_all rand{} {} {}x{} max{}".format(random, remove_all, repeats, sizes_of_k, max_iter)
 
-def normalise_and_remove(list_of_values, final_size, p=2, random=True):
-    if list_of_values.shape[0] < final_size:
-        return list_of_values
-    if random:
-        indexes = np.random.randint(0, len(list_of_values), final_size)
-        return full_all_to_net_cavex(list_of_values[indexes], final_size)
-    # final_size *= 2
-    normalised_values = torch.clone(list_of_values)
+def selected_smallest_distances(normalised_values, final_size, p=2):
     mins = torch.min(normalised_values, dim=0)[0]
     ranges = torch.max(normalised_values - mins, dim=0)[0]
     normalised_values -= mins
     normalised_values /= ranges + (ranges == 0)
-    dist = torch.cdist(normalised_values, normalised_values, p=2)
+    dist = torch.cdist(normalised_values, normalised_values, p=p)
     length = dist.shape[0]
     dist = dist.reshape(length*length)
     largest_distances = torch.topk(dist, k=length*length)
@@ -57,6 +50,16 @@ def normalise_and_remove(list_of_values, final_size, p=2, random=True):
         if largest_indexes[index] not in chosen_indexes:
             chosen_indexes.append(largest_indexes[index])
         index += 1
+    return torch.hstack(chosen_indexes)
+
+def normalise_and_remove(list_of_values, final_size, p=2, random=True):
+    if list_of_values.shape[0] < final_size:
+        return list_of_values
+    if random:
+        indexes = np.random.randint(0, len(list_of_values), final_size)
+        return full_all_to_net_cavex(list_of_values[indexes], final_size)
+    chosen_indexes = selected_smallest_distances(list_of_values, final_size, p=2)
+    list_of_values = torch.load('data/full_all {}.pt'.format(net_file))
     return full_all_to_net_cavex(list_of_values[chosen_indexes], final_size)
 
 def full_all_to_net_cavex(fa, k):
@@ -245,6 +248,8 @@ if remove_all:
     for K in sizes_of_k:
         results[K] = {'vex_cave': [], 'indexing': [], 'vex_sub_vex': [], 'vex_add_cave': [], 'cave_add_vex': [],
                       'cave_sub_cave': [], 'sub_indexed': [], 'indexed_y_sub_vex': []}
+        if not random:
+            repeats = 1
         for r in range(repeats):
             print("Starting repeat {}/{} of size {}".format(r+1, repeats, K))
             net_m, net_c, cavex_m, cavex_c = normalise_and_remove(full_all, K, random=random)
