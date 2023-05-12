@@ -28,26 +28,36 @@ sizes_of_k = [10, 25, 50, 100, 200, 400, 1000, 2500, 5000, 10000, 20000, 40000]
 repeats = 100
 max_iter = 10
 remove_all = True
+random = False
 
-test_label = "remove_all {} {}x{} max{}".format(remove_all, repeats, sizes_of_k, max_iter)
+test_label = "remove_all rand{} {} {}x{} max{}".format(random, remove_all, repeats, sizes_of_k, max_iter)
 
 def normalise_and_remove(list_of_values, final_size, p=2, random=True):
     if list_of_values.shape[0] < final_size:
         return list_of_values
     if random:
-        indexes = np.random.random_integers(0, len(list_of_values), final_size)
+        indexes = np.random.randint(0, len(list_of_values), final_size)
         return full_all_to_net_cavex(list_of_values[indexes], final_size)
-    mins = torch.min(list_of_values, dim=0)[0]
-    ranges = torch.max(list_of_values - mins, dim=0)[0]
-    list_of_values -= mins
-    list_of_values /= ranges + (ranges == 0)
-    dist = torch.cdist(list_of_values, list_of_values, p=2)
+    # final_size *= 2
+    normalised_values = torch.clone(list_of_values)
+    mins = torch.min(normalised_values, dim=0)[0]
+    ranges = torch.max(normalised_values - mins, dim=0)[0]
+    normalised_values -= mins
+    normalised_values /= ranges + (ranges == 0)
+    dist = torch.cdist(normalised_values, normalised_values, p=2)
     length = dist.shape[0]
     dist = dist.reshape(length*length)
-    largest_distances = torch.topk(dist, k=final_size)
+    largest_distances = torch.topk(dist, k=length*length)
+    largest_indexes = largest_distances[1] % length
     dist += (torch.eye(length).to(device) * torch.max(dist)).reshape(length*length)
     shortest_distances = torch.topk(dist, k=length-final_size, largest=False)
-    return shortest_distances
+    chosen_indexes = []
+    index = 0
+    while len(chosen_indexes) < final_size:
+        if largest_indexes[index] not in chosen_indexes:
+            chosen_indexes.append(largest_indexes[index])
+        index += 1
+    return full_all_to_net_cavex(list_of_values[chosen_indexes], final_size)
 
 def full_all_to_net_cavex(fa, k):
     nm = torch.reshape(fa[:, :(280*28)], [k, 10, 784]).transpose(0, 1)
@@ -237,7 +247,7 @@ if remove_all:
                       'cave_sub_cave': [], 'sub_indexed': [], 'indexed_y_sub_vex': []}
         for r in range(repeats):
             print("Starting repeat {}/{} of size {}".format(r+1, repeats, K))
-            net_m, net_c, cavex_m, cavex_c = normalise_and_remove(full_all, K)
+            net_m, net_c, cavex_m, cavex_c = normalise_and_remove(full_all, K, random=random)
             print("calculating testing accuracy")
             metrics = len(metric_name)
             with torch.no_grad():
@@ -260,6 +270,7 @@ if remove_all:
             for correct, name in zip(correct_out, metric_name):
                 print('{} testing accuracy: {} %'.format(name, 100 * correct / total))
                 results[K][name].append(100 * correct / total)
+            torch.save(results, 'data/results {}.pt'.format(test_label))
 else:
     full_cave = torch.load('data/full_cave {}.pt'.format(net_file))
     full_vex = torch.load('data/full_vex {}.pt'.format(net_file))
@@ -291,8 +302,6 @@ else:
             print('Model testing accuracy: {} %'.format(100 * correct_v / total))
             results[K].append(100 * correct_v / total)
 
-
-torch.save(results, 'data/results {}.pt'.format(test_label))
 
 # N, D = 10000, 2
 # x = 0.7 * torch.randn(N, D, dtype=dtype, device=device_id) + 0.3
