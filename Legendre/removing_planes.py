@@ -237,7 +237,7 @@ if remove_all:
                       'cave_sub_cave': [], 'sub_indexed': [], 'indexed_y_sub_vex': []}
         for r in range(repeats):
             print("Starting repeat {}/{} of size {}".format(r+1, repeats, K))
-            net_m, net_c, cavex_m, cavex_c = normalise_and_remove(full_all[:100, :], 10)
+            net_m, net_c, cavex_m, cavex_c = normalise_and_remove(full_all, K)
             print("calculating testing accuracy")
             metrics = len(metric_name)
             with torch.no_grad():
