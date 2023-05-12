@@ -4,11 +4,16 @@ from fast_pytorch_kmeans import KMeans
 from torchvision import transforms, datasets
 import torch
 from tqdm import tqdm
+import numpy as np
 # from Legendre.train_mnist import NeuralNet
 
-use_cuda = torch.cuda.is_available()
-dtype = torch.float32 if use_cuda else torch.float64
-device = "cuda" if use_cuda else "cpu"
+gpu = True
+if gpu:
+    torch.set_default_tensor_type(torch.cuda.FloatTensor)
+    device = 'cuda'
+else:
+    torch.set_default_tensor_type(torch.FloatTensor)
+    device = 'cpu'
 
 '''
 removal techniques:
@@ -26,9 +31,12 @@ remove_all = True
 
 test_label = "remove_all {} {}x{} max{}".format(remove_all, repeats, sizes_of_k, max_iter)
 
-def normalise_and_remove(list_of_values, final_size, p=2):
+def normalise_and_remove(list_of_values, final_size, p=2, random=True):
     if list_of_values.shape[0] < final_size:
         return list_of_values
+    if random:
+        indexes = np.random.random_integers(0, len(list_of_values), final_size)
+        return full_all_to_net_cavex(list_of_values[indexes], final_size)
     mins = torch.min(list_of_values, dim=0)[0]
     ranges = torch.max(list_of_values - mins, dim=0)[0]
     list_of_values -= mins
