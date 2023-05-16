@@ -55,12 +55,39 @@ file_number = int(sys.argv[1])
 # net_file = 'mnist0.5 relu hidden_size[200, 200] test_acc[98.51]'
 # net_file = 'mnist0.5 sigmoid cnnFalse hidden_size[200, 200] test_acc[98.11]'
 
+# if file_number == 1:
+#     net_file = 'mnist0.5 sigmoid cnnFalse hidden_size[200, 200, 200, 200, 200] test_acc[98.47]'
+# if file_number == 2:
+#     net_file = 'mnist0.5 sigmoid cnnFalse hidden_size[200, 200, 200, 200] test_acc[98.53]'
+# if file_number == 3:
+#     net_file = 'mnist0.5 sigmoid cnnFalse hidden_size[400, 400, 400, 400] test_acc[98.54]'
+
+c_flag = 0
 if file_number == 1:
-    net_file = 'mnist0.5 sigmoid cnnFalse hidden_size[200, 200, 200, 200, 200] test_acc[98.47]'
+    net_file = 'mnist0.5 sigmoid cnnFalse hidden_size[200, 200, 200, 200, 200] test_acc[98.47]',
 if file_number == 2:
-    net_file = 'mnist0.5 sigmoid cnnFalse hidden_size[200, 200, 200, 200] test_acc[98.53]'
+    net_file = 'mnist0.5 sigmoid cnnFalse hidden_size[200, 200, 200, 200] test_acc[98.53]',
 if file_number == 3:
-    net_file = 'mnist0.5 sigmoid cnnFalse hidden_size[400, 400, 400, 400] test_acc[98.54]'
+    net_file = 'mnist0.5 sigmoid cnnFalse hidden_size[200, 200, 200] test_acc[97.9]',
+if file_number == 4:
+    net_file = 'mnist0.5 sigmoid cnnFalse hidden_size[200, 200] test_acc[98.11]',
+if file_number == 5:
+    net_file = 'mnist0.5 sigmoid cnnFalse hidden_size[1600] test_acc[98.27]',
+if file_number == 6:
+    net_file = 'mnist0.5 sigmoid cnnFalse hidden_size[800] test_acc[98.18]',
+if file_number == 7:
+    net_file = 'mnist0.5 sigmoid cnnFalse hidden_size[400] test_acc[98.24]',
+if file_number == 8:
+    net_file = 'mnist0.5 sigmoid hidden_size[200] test_acc[98.1]',
+if file_number == 9:
+    net_file = 'mnist0.5 sigmoid cnnTrue hidden_size[200] test_acc[99.04]',
+if file_number == 10:
+    net_file = 'mnist0.5 relu cnnFalse hidden_size[200, 200] test_acc[98.5]',
+if file_number == 11:
+    net_file = 'mnist0.5 relu cnnFalse hidden_size[200] test_acc[98.12]',
+if file_number == 12:
+    c_flag = 5
+    net_file = 'mnist0.5 relu cnnFalse hidden_size[200] test_acc[98.12]',
 
 # if file_number == 1:
 #     net_file = 'mnist0.5 sigmoid cnnFalse hidden_size[200, 200, 200, 200] test_acc[97.49]'
@@ -227,6 +254,8 @@ with torch.no_grad():
     # cavex_const = torch.ones(num_outputs) * 7
     cavex_const = torch.tensor(
         [0.5253, 0.4542, 0.6770, 0.6772, 0.9017, 0.8467, 0.7145, 0.6749, 1.0000, 0.8234]) * 9
+    if c_flag:
+        cavex_const = torch.ones(num_outputs) * c_flag
     # cavex_const = torch.tensor([
     #     5.1569, 4.4589, 6.6459, 6.6473, 8.8517, 8.3111, 7.0140, 6.6251, 9.8162, 8.0831])
     # tensor([0.5253, 0.4542, 0.6770, 0.6772, 0.9017, 0.8467, 0.7145, 0.6749, 1.0000,
@@ -328,7 +357,7 @@ with torch.no_grad():
 
         total += labels.size(0)
 
-print("Current total {}".format(total))
+print(net_file, "\nCurrent total {}".format(total))
 print('Model testing accuracy: {} %'.format(100 * correct_m / total))
 for correct, name in zip(correct_out, metric_name):
     print('{} testing accuracy: {} %'.format(name, 100 * correct / total))
@@ -366,7 +395,7 @@ with torch.no_grad():
 
         total += labels.size(0)
 
-print("Current total {}".format(total))
+print(net_file, "\nCurrent total {}".format(total))
 print('Model training accuracy: {} %'.format(100 * correct_m / total))
 for correct, name in zip(correct_out, metric_name):
     print('{} training accuracy: {} %'.format(name, 100 * correct / total))
